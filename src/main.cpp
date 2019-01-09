@@ -2,23 +2,47 @@
  * ReaKontrol
  * Main plug-in code
  * Author: James Teh <jamie@jantrid.net>
- * Copyright 2018 James Teh
+ * Copyright 2018-2019 James Teh
  * License: GNU General Public License version 2.0
  */
 
 #include <oscpkt/udp.hh>
 #include <windows.h>
+#include <cstring>
 #include <oscpkt/oscpkt.hh>
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 
 using namespace std;
 
-const char* ADDRESS = "127.0.0.1";
+const char ADDRESS[] = "127.0.0.1";
 const int SEND_PORT = 7575;
 const int RECV_PORT = 7576;
+const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
 const int TRACKTYPE_GENERIC = 5;
+
+const string getKkInstanceName(MediaTrack* track) {
+	int fxCount = TrackFX_GetCount(track);
+	for (int fx = 0; fx < fxCount; ++fx) {
+		// Find the Komplete Kontrol FX.
+		char fxName[sizeof(KK_FX_PREFIX)];
+		TrackFX_GetFXName(track, fx, fxName, sizeof(fxName));
+		if (strcmp(fxName, KK_FX_PREFIX) != 0) {
+			continue;
+		}
+		// Check for the instance name.
+		// The first parameter should have a name in the form NIKBxx, where xx is a number.
+		char paramName[7];
+		TrackFX_GetParamName(track, fx, 0, paramName, sizeof(paramName));
+		if (strncmp(paramName, KK_INSTANCE_PARAM_PREFIX, sizeof(KK_INSTANCE_PARAM_PREFIX) - 1) != 0) {
+			return "";
+		}
+		return paramName;
+	}
+	return "";
+}
 
 class KkSurface: IReaperControlSurface {
 	public:
@@ -116,7 +140,8 @@ class KkSurface: IReaperControlSurface {
 		m.init("/live/track");
 		m.pushInt32(TRACKTYPE_GENERIC);
 		m.pushInt32(CSurf_TrackToID(track, false));
-		m.pushStr(""); // KK instance
+		const string kkInstance = getKkInstanceName(track);
+		m.pushStr(kkInstance.c_str());
 		this->_sendMessage(m);
 	}
 
