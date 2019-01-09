@@ -21,5 +21,7 @@
 #define REAPERAPI_WANT_TrackFX_GetParamName
 #define REAPERAPI_WANT_CSurf_OnStop
 #define REAPERAPI_WANT_CSurf_OnRecord
+#define REAPERAPI_WANT_Main_OnCommand
+#define REAPERAPI_WANT_CSurf_ScrubAmt
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>

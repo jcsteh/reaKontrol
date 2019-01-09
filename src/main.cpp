@@ -99,6 +99,15 @@ class KkSurface: IReaperControlSurface {
 			CSurf_OnStop();
 		} else if (inp->match("/live/session_record")) {
 			CSurf_OnRecord();
+		} else if (inp->match("/live/undo")) {
+			Main_OnCommand(40029, 0); // Edit: Undo
+		} else if (inp->match("/live/redo")) {
+			Main_OnCommand(40030, 0); // Edit: Redo
+		} else if (inp->match("/live/scrub")) {
+			auto arg = inp->arg();
+			float amount;
+			arg.popFloat(amount);
+			CSurf_ScrubAmt(amount);
 		} else if (inp->match("/live/track/info")) {
 			auto arg = inp->arg();
 			arg.pop(); // Track type
@@ -119,7 +128,11 @@ class KkSurface: IReaperControlSurface {
 			out.pushFloat(0); // Pan
 			this->_sendMessage(out);
 		} else {
+			// Debug
 			ShowConsoleMsg(inp->addressPattern().c_str());
+			auto arg = inp->arg();
+			if (arg.isInt32()) ShowConsoleMsg("int32");
+			if (arg.isFloat()) ShowConsoleMsg("float");
 		}
 	}
 
