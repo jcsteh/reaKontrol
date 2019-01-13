@@ -11,6 +11,13 @@
 #include <windows.h>
 
 #define REAPERAPI_MINIMAL
+#define REAPERAPI_WANT_GetNumMIDIInputs
+#define REAPERAPI_WANT_GetNumMIDIInputs
+#define REAPERAPI_WANT_GetMIDIInputName
+#define REAPERAPI_WANT_GetNumMIDIOutputs
+#define REAPERAPI_WANT_GetMIDIOutputName
+#define REAPERAPI_WANT_CreateMIDIInput
+#define REAPERAPI_WANT_CreateMIDIOutput
 #define REAPERAPI_WANT_CountTracks
 #define REAPERAPI_WANT_CSurf_TrackToID
 #define REAPERAPI_WANT_GetLastTouchedTrack

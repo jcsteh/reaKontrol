@@ -6,22 +6,73 @@
  * License: GNU General Public License version 2.0
  */
 
-#include <oscpkt/udp.hh>
 #include <windows.h>
+#include <string>
+#include <sstream>
 #include <cstring>
-#include <oscpkt/oscpkt.hh>
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 
 using namespace std;
 
-const char ADDRESS[] = "127.0.0.1";
-const int SEND_PORT = 7575;
-const int RECV_PORT = 7576;
+const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
+const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
+const unsigned char MIDI_CC = 0xBF;
+const unsigned char MIDI_SYSEX_BEGIN[] = {
+	0xF0, 0x00, 0x21, 0x09, 0x00, 0x00, 0x44, 0x43, 0x01, 0x00};
+const unsigned char MIDI_SYSEX_END = 0xF7;
 const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
+const int BANK_NUM_TRACKS = 8;
 
-const int TRACKTYPE_GENERIC = 5;
+const unsigned char CMD_HELLO = 0x01;
+const unsigned char CMD_GOODBYE = 0x02;
+const unsigned char CMD_PLAY = 0x10;
+const unsigned char CMD_RESTART = 0x11;
+const unsigned char CMD_REC = 0x12;
+const unsigned char CMD_STOP = 0x14;
+const unsigned char CMD_UNDO = 0x20;
+const unsigned char CMD_REDO = 0x21;
+const unsigned char CMD_NAV_TRACKS = 0x30;
+const unsigned char CMD_MOVE_TRANSPORT = 0x34;
+const unsigned char CMD_TRACK_AVAIL = 0x40;
+const unsigned char CMD_SEL_TRACK_PARAMS_CHANGED = 0x41;
+const unsigned char CMD_TRACK_SELECTED = 0x42;
+const unsigned char CMD_TRACK_NAME = 0x48;
+
+const unsigned char TRTYPE_UNSPEC = 1;
+
+int getKkMidiInput() {
+	int count = GetNumMIDIInputs();
+	for (int dev = 0; dev < count; ++dev) {
+		char name[30];
+		bool present = GetMIDIInputName(dev, name, sizeof(name));
+		if (!present) {
+			continue;
+		}
+		if (strcmp(name, KKS_DEVICE_NAME) == 0
+				|| strcmp(name, KKA_DEVICE_NAME) == 0) {
+			return dev;
+		}
+	}
+	return -1;
+}
+
+int getKkMidiOutput() {
+	int count = GetNumMIDIOutputs();
+	for (int dev = 0; dev < count; ++dev) {
+		char name[30];
+		bool present = GetMIDIOutputName(dev, name, sizeof(name));
+		if (!present) {
+			continue;
+		}
+		if (strcmp(name, KKS_DEVICE_NAME) == 0
+				|| strcmp(name, KKA_DEVICE_NAME) == 0) {
+			return dev;
+		}
+	}
+	return -1;
+}
 
 const string getKkInstanceName(MediaTrack* track) {
 	int fxCount = TrackFX_GetCount(track);
@@ -46,18 +97,25 @@ const string getKkInstanceName(MediaTrack* track) {
 
 class KkSurface: IReaperControlSurface {
 	public:
-	KkSurface() {
-		this->_sendSock.connectTo(ADDRESS, SEND_PORT);
-		this->_recvSock.bindTo(RECV_PORT);
-		oscpkt::Message m;
-		m.init("/remix/oscserver/startup").pushInt32(1);
-		this->_sendMessage(m);
+	KkSurface(int inDev, int outDev) {
+		this->_midiIn = CreateMIDIInput(inDev);
+		this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
+		if (!this->_midiIn || !this->_midiOut) {
+			return;
+		}
+		this->_midiIn->start();
+		this->_sendCc(CMD_HELLO, 0);
 	}
 
 	virtual ~KkSurface() {
-		oscpkt::Message m;
-		m.init("/script/shutdown").pushInt32(1);
-		this->_sendMessage(m);
+		if (this->_midiIn)  {
+			this->_midiIn->stop();
+			delete this->_midiIn;
+		}
+		if (this->_midiOut) {
+			this->_sendCc(CMD_GOODBYE, 0);
+			delete this->_midiOut;
+		}
 	}
 
 	virtual const char* GetTypeString() override {
@@ -73,99 +131,105 @@ class KkSurface: IReaperControlSurface {
 	}
 
 	virtual void Run() override {
-		if (!this->_recvSock.receiveNextPacket(0)) {
+		if (!this->_midiIn) {
 			return;
 		}
-		oscpkt::PacketReader pr;
-		pr.init(this->_recvSock.packetData(), this->_recvSock.packetSize());
-		oscpkt::Message* inp = nullptr;
-		if (!pr.isOk() || !(inp = pr.popMessage())) {
-			return;
-		}
-
-		if (inp->match("/script/ping")) {
-			oscpkt::Message out;
-			out.init("/script/pong").pushInt32(1);
-			this->_sendMessage(out);
-		} else if (inp->match("/script/init")) {
-			this->SetTrackListChange();
-			MediaTrack* track = GetLastTouchedTrack();
-			if (track) {
-				this->SetSurfaceSelected(track, true);
-			}
-		} else if (inp->match("/live/play")) {
-			CSurf_OnPlay();
-		} else if (inp->match("/live/stop")) {
-			CSurf_OnStop();
-		} else if (inp->match("/live/session_record")) {
-			CSurf_OnRecord();
-		} else if (inp->match("/live/undo")) {
-			Main_OnCommand(40029, 0); // Edit: Undo
-		} else if (inp->match("/live/redo")) {
-			Main_OnCommand(40030, 0); // Edit: Redo
-		} else if (inp->match("/live/scrub")) {
-			auto arg = inp->arg();
-			float amount;
-			arg.popFloat(amount);
-			CSurf_ScrubAmt(amount);
-		} else if (inp->match("/live/track/info")) {
-			auto arg = inp->arg();
-			arg.pop(); // Track type
-			int trackId;
-			arg.popInt32(trackId);
-			// fixme: Use the actual track being requested and its actual name, states, etc.
-			MediaTrack* track = GetLastTouchedTrack();
-			oscpkt::Message out;
-			out.init("/live/track/info");
-			out.pushInt32(TRACKTYPE_GENERIC);
-			out.pushInt32(trackId);
-			out.pushStr("my name");
-			out.pushInt32(0); // Colour
-			out.pushInt32(1); // Arm
-			out.pushInt32(0); // Solo
-			out.pushInt32(0); // Mute
-			out.pushFloat(0); // Volume
-			out.pushFloat(0); // Pan
-			this->_sendMessage(out);
-		} else {
-			// Debug
-			ShowConsoleMsg(inp->addressPattern().c_str());
-			auto arg = inp->arg();
-			if (arg.isInt32()) ShowConsoleMsg("int32");
-			if (arg.isFloat()) ShowConsoleMsg("float");
+		this->_midiIn->SwapBufs(timeGetTime());
+		MIDI_eventlist* list = this->_midiIn->GetReadBuf();
+		MIDI_event_t* evt;
+		int i = 0;
+		while (evt = list->EnumItems(&i)) {
+			this->_onMidiEvent(evt);
 		}
 	}
 
 	virtual void SetTrackListChange() override {
-		oscpkt::Message m;
-		m.init("/live/size");
-		m.pushInt32(CountTracks(0));
-		m.pushInt32(0); // Number of scenes
-		m.pushInt32(0); // Number of returns
-		this->_sendMessage(m);
 	}
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
-		if (!selected) {
-			return;
+		if (selected) {
+			int id = CSurf_TrackToID(track, false);
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_bankStart = id - numInBank;
+			this->_sendSysex(CMD_TRACK_AVAIL, 2/*TRTYPE_UNSPEC*/, numInBank);
+			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, "foo");
+			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
+			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
+				getKkInstanceName(track));
 		}
-		oscpkt::Message m;
-		m.init("/live/track");
-		m.pushInt32(TRACKTYPE_GENERIC);
-		m.pushInt32(CSurf_TrackToID(track, false));
-		const string kkInstance = getKkInstanceName(track);
-		m.pushStr(kkInstance.c_str());
-		this->_sendMessage(m);
 	}
 
 	private:
-	oscpkt::UdpSocket _sendSock;
-	oscpkt::UdpSocket _recvSock;
+	midi_Input* _midiIn = nullptr;
+	midi_Output* _midiOut = nullptr;
+	int _protocolVersion = 0;
+	int _bankStart = 0;
 
-	void _sendMessage(const oscpkt::Message& message) {
-		oscpkt::PacketWriter pw;
-		pw.init().addMessage(message);
-		this->_sendSock.sendPacket(pw.packetData(), pw.packetSize());
+	void _onMidiEvent(MIDI_event_t* event) {
+		ShowConsoleMsg("got message");
+		if (event->midi_message[0] != MIDI_CC) {
+			return;
+		}
+		unsigned char& value = event->midi_message[2];
+		switch (event->midi_message[1]) { // Command
+			case CMD_HELLO:
+				this->_protocolVersion = value;
+				break;
+			case CMD_PLAY:
+				CSurf_OnPlay();
+				break;
+			case CMD_REC:
+				CSurf_OnRecord();
+				break;
+			case CMD_STOP:
+				CSurf_OnStop();
+				break;
+			case CMD_UNDO:
+				Main_OnCommand(40029, 0); // Edit: Undo
+				break;
+			case CMD_REDO:
+				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_MOVE_TRANSPORT:
+				// value is -1 or 1.
+				double amount = (signed char)value;
+				CSurf_ScrubAmt(amount);
+				break;
+		}
+	}
+
+	void _sendCc(unsigned char command, unsigned char value) {
+		if (this->_midiOut) {
+			this->_midiOut->Send(MIDI_CC, command, value, -1);
+		}
+	}
+
+	void _sendSysex(unsigned char command, unsigned char value,
+		unsigned char track, const string& info = ""
+	) {
+		if (!this->_midiOut) {
+			return;
+		}
+		int length = sizeof(MIDI_SYSEX_BEGIN)
+			+ 3 // command, value, track
+			+ info.length()
+			+ sizeof(MIDI_SYSEX_END);
+		// MIDI_event_t includes 4 bytes for the message, but we need more.
+		MIDI_event_t* event = (MIDI_event_t*)new unsigned char[
+			sizeof(MIDI_event_t) - 4 + length];
+		event->frame_offset = 0;
+		event->size = length;
+		memcpy(event->midi_message, MIDI_SYSEX_BEGIN,
+			sizeof(MIDI_SYSEX_BEGIN));
+		int messagePos = sizeof(MIDI_SYSEX_BEGIN);
+		event->midi_message[messagePos++] = command;
+		event->midi_message[messagePos++] = value;
+		event->midi_message[messagePos++] = track;
+		memcpy(event->midi_message + messagePos, info.c_str(), info.length());
+		messagePos += info.length();
+		event->midi_message[messagePos++] = MIDI_SYSEX_END;
+		this->_midiOut->SendMsg(event, -1);
+		delete event;
 	}
 
 };
@@ -181,12 +245,20 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 			return 0; // Incompatible.
 		}
 
-		surface = new KkSurface();
+		int inDev = getKkMidiInput();
+		if (inDev != -1) {
+			int outDev = getKkMidiOutput();
+			if (outDev != -1) {
+				surface = new KkSurface(inDev, outDev);
+			}
+		}
 		rec->Register("csurf_inst", (void*)surface);
 		return 1;
 	} else {
 		// Unload.
-		delete surface;
+		if (surface) {
+			delete surface;
+		}
 		return 0;
 	}
 }
