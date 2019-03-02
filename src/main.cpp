@@ -217,17 +217,23 @@ class KkSurface: IReaperControlSurface {
 	void _onBankChange() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int trackCount = CountTracks(nullptr);
-		if (bankEnd >= trackCount) {
-			bankEnd = trackCount - 1;
+		int numTracks = CSurf_NumTracks(false);
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
 		}
 		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
 			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
 			// todo: muted, soloed, armed, volume text, pan text
 			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+			if (!name) {
+				name = "";
+			}
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			// todo: level meters, volume, pan
 		}
