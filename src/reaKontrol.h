@@ -20,6 +20,7 @@
 #define REAPERAPI_WANT_CreateMIDIOutput
 #define REAPERAPI_WANT_CountTracks
 #define REAPERAPI_WANT_CSurf_TrackToID
+#define REAPERAPI_WANT_CSurf_TrackFromID
 #define REAPERAPI_WANT_GetLastTouchedTrack
 #define REAPERAPI_WANT_CSurf_OnPlay
 #define REAPERAPI_WANT_ShowConsoleMsg
@@ -30,5 +31,6 @@
 #define REAPERAPI_WANT_CSurf_OnRecord
 #define REAPERAPI_WANT_Main_OnCommand
 #define REAPERAPI_WANT_CSurf_ScrubAmt
+#define REAPERAPI_WANT_GetSetMediaTrackInfo
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>

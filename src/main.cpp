@@ -31,6 +31,8 @@ const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
 const unsigned char CMD_STOP = 0x14;
+const unsigned char CMD_METRO = 0x17;
+const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
 const unsigned char CMD_NAV_TRACKS = 0x30;
@@ -150,9 +152,11 @@ class KkSurface: IReaperControlSurface {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
+			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
-			this->_sendSysex(CMD_TRACK_AVAIL, 2/*TRTYPE_UNSPEC*/, numInBank);
-			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, "foo");
+			if (this->_bankStart != oldBankStart) {
+				this->_onBankChange();
+			}
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
@@ -163,10 +167,9 @@ class KkSurface: IReaperControlSurface {
 	midi_Input* _midiIn = nullptr;
 	midi_Output* _midiOut = nullptr;
 	int _protocolVersion = 0;
-	int _bankStart = 0;
+	int _bankStart = -1;
 
 	void _onMidiEvent(MIDI_event_t* event) {
-		ShowConsoleMsg("got message");
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
 		}
@@ -184,11 +187,24 @@ class KkSurface: IReaperControlSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
+			case CMD_METRO:
+				Main_OnCommand(40364, 0); // Options: Toggle metronome
+				break;
+			case CMD_TEMPO:
+				Main_OnCommand(1134, 0); // Transport: Tap tempo
+				break;
 			case CMD_UNDO:
 				Main_OnCommand(40029, 0); // Edit: Undo
 				break;
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_NAV_TRACKS:
+				// Value is -1 or 1.
+				Main_OnCommand(value == 1 ?
+					40285 : // Track: Go to next track
+					40286, // Track: Go to previous track
+				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
 				// value is -1 or 1.
@@ -196,6 +212,26 @@ class KkSurface: IReaperControlSurface {
 				CSurf_ScrubAmt(amount);
 				break;
 		}
+	}
+
+	void _onBankChange() {
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
+		int trackCount = CountTracks(nullptr);
+		if (bankEnd >= trackCount) {
+			bankEnd = trackCount - 1;
+		}
+		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
+			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
+			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
+			// todo: muted, soloed, armed, volume text, pan text
+			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+			// todo: level meters, volume, pan
+		}
+		// todo: navigate tracks, navigate banks
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
