@@ -5,12 +5,12 @@
 # License: GNU General Public License version 2.0
 
 Import("env")
-env.Append(CPPPATH=("#include", "#include/oscpkt"))
+env.Append(CPPPATH="#include")
 
 sources = [
 	"main.cpp",
 ]
-libs = ["ws2_32", "winmm"]
+libs = ["winmm"]
 
 env.Append(CPPFLAGS="/EHsc")
 # We always want debug symbols.
