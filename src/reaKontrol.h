@@ -2,7 +2,7 @@
  * ReaKontrol
  * Main header
  * Author: James Teh <jamie@jantrid.net>
- * Copyright 2018 James Teh
+ * Copyright 2018-2019 James Teh
  * License: GNU General Public License version 2.0
  */
 
@@ -34,3 +34,22 @@
 #define REAPERAPI_WANT_GetSetMediaTrackInfo
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
+
+const std::string getKkInstanceName(MediaTrack* track);
+
+class BaseSurface: public IReaperControlSurface {
+	public:
+	BaseSurface(int inDev, int outDev);
+	virtual ~BaseSurface();
+	virtual const char* GetConfigString() override {
+		return "";
+	}
+	virtual void Run() override;
+
+	protected:
+	midi_Input* _midiIn = nullptr;
+	midi_Output* _midiOut = nullptr;
+	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
+};
+
+IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);

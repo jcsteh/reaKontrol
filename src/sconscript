@@ -9,6 +9,7 @@ env.Append(CPPPATH="#include")
 
 sources = [
 	"main.cpp",
+	"niMidi.cpp",
 ]
 libs = ["winmm"]
 
