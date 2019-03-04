@@ -17,6 +17,7 @@ using namespace std;
 
 const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
+const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
 const unsigned char MIDI_CC = 0xBF;
 const unsigned char MIDI_SYSEX_BEGIN[] = {
 	0xF0, 0x00, 0x21, 0x09, 0x00, 0x00, 0x44, 0x43, 0x01, 0x00};
@@ -53,7 +54,8 @@ int getKkMidiInput() {
 			continue;
 		}
 		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0) {
+				|| strcmp(name, KKA_DEVICE_NAME) == 0
+				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
 			return dev;
 		}
 	}
@@ -69,7 +71,8 @@ int getKkMidiOutput() {
 			continue;
 		}
 		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0) {
+				|| strcmp(name, KKA_DEVICE_NAME) == 0
+				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
 			return dev;
 		}
 	}
