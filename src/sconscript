@@ -10,8 +10,9 @@ env.Append(CPPPATH="#include")
 sources = [
 	"main.cpp",
 	"niMidi.cpp",
+	"mcu.cpp",
 ]
-libs = ["winmm"]
+libs = ["winmm", "SetupAPI"]
 
 env.Append(CPPFLAGS="/EHsc")
 # We always want debug symbols.
