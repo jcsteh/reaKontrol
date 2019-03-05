@@ -97,7 +97,7 @@ bool isMk1Connected() {
 	return false;
 }
 
-const string getKkInstanceName(MediaTrack* track) {
+const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
 	for (int fx = 0; fx < fxCount; ++fx) {
 		// Find the Komplete Kontrol FX.
@@ -110,8 +110,12 @@ const string getKkInstanceName(MediaTrack* track) {
 		// The first parameter should have a name in the form NIKBxx, where xx is a number.
 		char paramName[7];
 		TrackFX_GetParamName(track, fx, 0, paramName, sizeof(paramName));
-		if (strncmp(paramName, KK_INSTANCE_PARAM_PREFIX, sizeof(KK_INSTANCE_PARAM_PREFIX) - 1) != 0) {
+		const size_t prefixLen = sizeof(KK_INSTANCE_PARAM_PREFIX) - 1;
+		if (strncmp(paramName, KK_INSTANCE_PARAM_PREFIX, prefixLen) != 0) {
 			return "";
+		}
+		if (stripPrefix) {
+			return string(paramName).substr(prefixLen);
 		}
 		return paramName;
 	}

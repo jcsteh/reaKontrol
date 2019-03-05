@@ -35,7 +35,7 @@
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
-const std::string getKkInstanceName(MediaTrack* track);
+const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {
 	public:
