@@ -7,9 +7,11 @@
  */
 
 #include <windows.h>
+#ifdef _WIN32
 #include <SetupAPI.h>
 #include <initguid.h>
 #include <Usbiodef.h>
+#endif
 #include <string>
 #include <cstring>
 #define REAPERAPI_IMPLEMENT
@@ -61,6 +63,7 @@ int getKkMidiOutput() {
 }
 
 bool isMk1Connected() {
+#ifdef _WIN32
 	HDEVINFO infoSet = SetupDiGetClassDevsA(&GUID_DEVINTERFACE_USB_DEVICE,
 		nullptr, nullptr, DIGCF_DEVICEINTERFACE | DIGCF_PRESENT);
 	for (DWORD i = 0; i < 256; ++i) {
@@ -94,6 +97,7 @@ bool isMk1Connected() {
 		}
 	}
 	SetupDiDestroyDeviceInfoList(infoSet);
+#endif
 	return false;
 }
 
