@@ -39,6 +39,15 @@ const unsigned char CMD_TRACK_NAME = 0x48;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
+// Convert a signed 7 bit MIDI value to a signed char.
+// That is, convertSignedMidiValue(127) will return -1.
+signed char convertSignedMidiValue(unsigned char value) {
+	if (value <= 63) {
+		return value;
+	}
+	return value - 128;
+}
+
 class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
@@ -115,9 +124,7 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				// value is -1 or 1.
-				double amount = (signed char)value;
-				CSurf_ScrubAmt(amount);
+				CSurf_ScrubAmt(convertSignedMidiValue(value));
 				break;
 		}
 	}
