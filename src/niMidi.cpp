@@ -154,11 +154,18 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_PLAY:
 				CSurf_OnPlay();
 				break;
+			case CMD_RESTART:
+				CSurf_GoStart();
+				CSurf_OnPlay();
+				break;
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
+				break;
+			case CMD_LOOP:
+				// Find out how to implement. Probably set start point at first press, and point on second press.
 				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
@@ -171,6 +178,9 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_QUANTIZE:
+				// Todo, probably use something like SWS/FNG: Quantize item positions and MIDI note positions to grid
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.

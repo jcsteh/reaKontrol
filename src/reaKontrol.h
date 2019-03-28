@@ -27,6 +27,7 @@
 #define REAPERAPI_WANT_TrackFX_GetCount
 #define REAPERAPI_WANT_TrackFX_GetFXName
 #define REAPERAPI_WANT_TrackFX_GetParamName
+#define REAPERAPI_WANT_CSurf_GoStart
 #define REAPERAPI_WANT_CSurf_OnStop
 #define REAPERAPI_WANT_CSurf_OnRecord
 #define REAPERAPI_WANT_Main_OnCommand
