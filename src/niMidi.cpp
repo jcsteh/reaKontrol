@@ -25,17 +25,52 @@ const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
+const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
+const unsigned char CMD_CLEAR = 0x15;
+const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
+const unsigned char CMD_QUANTIZE = 0x22;
+const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
+const unsigned char CMD_NAV_BANKS = 0x31;
+const unsigned char CMD_NAV_CLIPS = 0x32;
+const unsigned char CMD_NAV_SCENES = 0x33;
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
+const unsigned char CMD_MOVE_LOOP = 0x35;
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SEL_TRACK_PARAMS_CHANGED = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
+const unsigned char CMD_TRACK_MUTED = 0x43;
+const unsigned char CMD_TRACK_SOLOED = 0x44;
+const unsigned char CMD_TRACK_ARMED = 0x45;
+const unsigned char CMD_TRACK_VOLUME_CHANGED = 0x46;
+const unsigned char CMD_TRACK_PAN_CHANGED = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
+const unsigned char CMD_TRACK_VU = 0x49;
+const unsigned char CMD_KNOB_VOLUME1 = 0x50;
+const unsigned char CMD_KNOB_VOLUME2 = 0x51;
+const unsigned char CMD_KNOB_VOLUME3 = 0x52;
+const unsigned char CMD_KNOB_VOLUME4 = 0x53;
+const unsigned char CMD_KNOB_VOLUME5 = 0x54;
+const unsigned char CMD_KNOB_VOLUME6 = 0x55;
+const unsigned char CMD_KNOB_VOLUME7 = 0x56;
+const unsigned char CMD_KNOB_VOLUME8 = 0x57;
+const unsigned char CMD_KNOB_PAN1 = 0x58;
+const unsigned char CMD_KNOB_PAN2 = 0x59;
+const unsigned char CMD_KNOB_PAN3 = 0x5a;
+const unsigned char CMD_KNOB_PAN4 = 0x5b;
+const unsigned char CMD_KNOB_PAN5 = 0x5c;
+const unsigned char CMD_KNOB_PAN6 = 0x5d;
+const unsigned char CMD_KNOB_PAN7 = 0x5e;
+const unsigned char CMD_KNOB_PAN8 = 0x5f;
+const unsigned char CMD_CHANGE_VOLUME = 0x64;
+const unsigned char CMD_CHANGE_PAN = 0x65;
+const unsigned char CMD_TOGGLE_MUTE = 0x66;
+const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
@@ -90,6 +125,12 @@ class NiMidiSurface: public BaseSurface {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
 		}
+		ostringstream s;
+		s << "MIDI message " << showbase << hex
+			<< (int)event->midi_message[0] << " "
+			<< (int)event->midi_message[1] << " "
+			<< (int)event->midi_message[2] << endl;
+		ShowConsoleMsg(s.str().c_str());
 		unsigned char& value = event->midi_message[2];
 		switch (event->midi_message[1]) { // Command
 			case CMD_HELLO:
