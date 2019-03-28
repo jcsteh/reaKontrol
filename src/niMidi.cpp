@@ -105,6 +105,15 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetTrackListChange() override {
 	}
 
+	virtual void SetSurfaceVolume(MediaTrack *trackid, double volume) override {
+	}
+
+	virtual void SetSurfacePan(MediaTrack *trackid, double pan) override {
+	}
+
+	virtual void SetSurfaceMute(MediaTrack *trackid, bool mute) override {
+	}
+
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
@@ -118,6 +127,12 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
 		}
+	}
+
+	virtual void SetSurfaceSolo(MediaTrack *trackid, bool solo) override {
+	}
+
+	virtual void SetSurfaceRecArm(MediaTrack *trackid, bool recarm) override {
 	}
 
 	protected:
@@ -189,7 +204,13 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
-			// todo: muted, soloed, armed, volume text, pan text
+			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+			this->_sendSysex(CMD_TRACK_SOLOED, (soloState==0) ? 0 : 1, numInBank);
+			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
+			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
+			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
+			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
+			// todo: volume text, pan text
 			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
