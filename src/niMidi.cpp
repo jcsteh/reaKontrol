@@ -106,9 +106,11 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual void SetSurfaceVolume(MediaTrack *trackid, double volume) override {
+		// todo: update volume text if applicable
 	}
 
 	virtual void SetSurfacePan(MediaTrack *trackid, double pan) override {
+		// todo: update pantext if applicable
 	}
 
 	virtual void SetSurfaceMute(MediaTrack *trackid, bool mute) override {
@@ -140,14 +142,9 @@ class NiMidiSurface: public BaseSurface {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
 		}
-		ostringstream s;
-		s << "MIDI message " << showbase << hex
-			<< (int)event->midi_message[0] << " "
-			<< (int)event->midi_message[1] << " "
-			<< (int)event->midi_message[2] << endl;
-		ShowConsoleMsg(s.str().c_str());
+		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
-		switch (event->midi_message[1]) { // Command
+		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
@@ -164,9 +161,6 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
-			case CMD_LOOP:
-				// Find out how to implement. Probably set start point at first press, and point on second press.
-				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
 				break;
@@ -179,9 +173,6 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
 				break;
-			case CMD_QUANTIZE:
-				// Todo, probably use something like SWS/FNG: Quantize item positions and MIDI note positions to grid
-				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -189,8 +180,43 @@ class NiMidiSurface: public BaseSurface {
 					40286, // Track: Go to previous track
 				0);
 				break;
+			case CMD_NAV_CLIPS:
+				// Value is -1 or 1.
+				Main_OnCommand(value == 1 ?
+					40417 : // Item navigation: Select and move to next item
+					40416, // Item navigation: Select and move to previous item
+				0);
+				break;
 			case CMD_MOVE_TRANSPORT:
 				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				break;
+			case CMD_KNOB_VOLUME1:
+			case CMD_KNOB_VOLUME2:
+			case CMD_KNOB_VOLUME3:
+			case CMD_KNOB_VOLUME4:
+			case CMD_KNOB_VOLUME5:
+			case CMD_KNOB_VOLUME6:
+			case CMD_KNOB_VOLUME7:
+			case CMD_KNOB_VOLUME8:
+				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+				break;
+			case CMD_KNOB_PAN1:
+			case CMD_KNOB_PAN2:
+			case CMD_KNOB_PAN3:
+			case CMD_KNOB_PAN4:
+			case CMD_KNOB_PAN5:
+			case CMD_KNOB_PAN6:
+			case CMD_KNOB_PAN7:
+			case CMD_KNOB_PAN8:
+				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				break;
+			default:
+				ostringstream s;
+				s << "Unhandled MIDI message " << showbase << hex
+					<< (int)event->midi_message[0] << " "
+					<< (int)event->midi_message[1] << " "
+					<< (int)event->midi_message[2] << endl;
+				ShowConsoleMsg(s.str().c_str());
 				break;
 		}
 	}
@@ -229,6 +255,20 @@ class NiMidiSurface: public BaseSurface {
 			// todo: level meters, volume, pan
 		}
 		// todo: navigate tracks, navigate banks
+	}
+
+	void _onKnobVolumeChange(unsigned char command, signed char value) {
+		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
+		if (!track) return;
+		CSurf_SetSurfaceVolume(track,CSurf_OnVolumeChange(track,value * 0.1,true),NULL);
+	}
+
+	void _onKnobPanChange(unsigned char command, signed char value) {
+		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
+		if (!track) return;
+		CSurf_SetSurfacePan(track,CSurf_OnPanChange(track,value*1.0,true),NULL);
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
