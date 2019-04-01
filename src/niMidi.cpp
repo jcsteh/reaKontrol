@@ -102,20 +102,6 @@ class NiMidiSurface: public BaseSurface {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
 
-	virtual void SetTrackListChange() override {
-	}
-
-	virtual void SetSurfaceVolume(MediaTrack *trackid, double volume) override {
-		// todo: update volume text if applicable
-	}
-
-	virtual void SetSurfacePan(MediaTrack *trackid, double pan) override {
-		// todo: update pantext if applicable
-	}
-
-	virtual void SetSurfaceMute(MediaTrack *trackid, bool mute) override {
-	}
-
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
@@ -129,12 +115,6 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
 		}
-	}
-
-	virtual void SetSurfaceSolo(MediaTrack *trackid, bool solo) override {
-	}
-
-	virtual void SetSurfaceRecArm(MediaTrack *trackid, bool recarm) override {
 	}
 
 	protected:
