@@ -163,8 +163,8 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
-					40417 : // Item navigation: Select and move to next item
-					40416, // Item navigation: Select and move to previous item
+					40173 : // Markers: Go to next marker/project end
+					40172, // Markers: Go to previous marker/project start
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
