@@ -5,3 +5,4 @@
 *.hh text
 sconstruct text
 sconscript text
+*.md text
