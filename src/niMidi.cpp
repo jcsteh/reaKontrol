@@ -129,11 +129,15 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
+				// Toggles between play and pause
 				CSurf_OnPlay();
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
-				CSurf_OnPlay();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					CSurf_OnPlay();
+				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
