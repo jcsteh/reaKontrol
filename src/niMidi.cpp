@@ -145,6 +145,9 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
+			case CMD_LOOP:
+				Main_OnCommand(1068, 0); // Transport: Toggle repeat
+				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
 				break;
