@@ -238,16 +238,20 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
+		if (!track) {
+			return;
+		}
 		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value * 0.1, true), nullptr);
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
+		if (!track) {
+			return;
+		}
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value * 1.0, true), nullptr);
 	}
 
