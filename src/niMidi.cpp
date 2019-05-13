@@ -177,6 +177,10 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_MOVE_TRANSPORT:
 				CSurf_ScrubAmt(convertSignedMidiValue(value));
 				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
+				break;
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
 			case CMD_KNOB_VOLUME3:
@@ -242,6 +246,12 @@ class NiMidiSurface: public BaseSurface {
 			// todo: level meters, volume, pan
 		}
 		// todo: navigate tracks, navigate banks
+	}
+
+	void _onTrackSelect(unsigned char TrackInBank) {
+		int track = this->_bankStart + TrackInBank;
+		// MISSING: Check if track actually exists (if this is the last bank)
+		Main_OnCommand(40938 + track, 0);
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
