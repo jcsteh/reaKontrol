@@ -108,6 +108,8 @@ class NiMidiSurface: public BaseSurface {
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
+			// ToDo: calling onBankChange needs to happen more frequently.
+			// Need a different criteria. Display does not update properly.
 			if (this->_bankStart != oldBankStart) {
 				this->_onBankChange();
 			}
@@ -129,17 +131,24 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
+				// Toggles between play and pause
 				CSurf_OnPlay();
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
-				CSurf_OnPlay();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					CSurf_OnPlay();
+				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
+				break;
+			case CMD_LOOP:
+				Main_OnCommand(1068, 0); // Transport: Toggle repeat
 				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
@@ -169,6 +178,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_MOVE_TRANSPORT:
 				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
 				break;
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -237,17 +250,28 @@ class NiMidiSurface: public BaseSurface {
 		// todo: navigate tracks, navigate banks
 	}
 
+	void _onTrackSelect(unsigned char TrackInBank) {
+		int track = this->_bankStart + TrackInBank;
+		// ToDo: Check if track actually exists (if this is the last bank) and if track <100
+		// Direct track select via Reaper action ends at track 99. Is there a better API call?
+		Main_OnCommand(40938 + track, 0);
+	}
+
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
+		if (!track) {
+			return;
+		}
 		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value * 0.1, true), nullptr);
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
+		if (!track) {
+			return;
+		}
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value * 1.0, true), nullptr);
 	}
 

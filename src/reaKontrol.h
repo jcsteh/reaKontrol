@@ -37,6 +37,7 @@
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
+#define REAPERAPI_WANT_GetPlayState
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
