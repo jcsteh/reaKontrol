@@ -108,6 +108,8 @@ class NiMidiSurface: public BaseSurface {
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
+			// ToDo: calling onBankChange needs to happen more frequently.
+			// Need a different criteria. Display does not update properly.
 			if (this->_bankStart != oldBankStart) {
 				this->_onBankChange();
 			}
@@ -250,7 +252,8 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onTrackSelect(unsigned char TrackInBank) {
 		int track = this->_bankStart + TrackInBank;
-		// MISSING: Check if track actually exists (if this is the last bank)
+		// ToDo: Check if track actually exists (if this is the last bank) and if track <100
+		// Direct track select via Reaper action ends at track 99. Is there a better API call?
 		Main_OnCommand(40938 + track, 0);
 	}
 
