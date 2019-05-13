@@ -107,12 +107,22 @@ class NiMidiSurface: public BaseSurface {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
+			// ToDo: _bankStart should only be changed automatically if incremental
+			// track navigation is used => couple this to CMD_NAV_TRACKS.
+			// _bankStart can be manually switched via buttons, see CMD_NAV_BANKS
+			// This allows mixer view to focus on a bank while selected track (and plugin view focus)
+			// is elsewhere. That is a much better behavior than currently.
 			this->_bankStart = id - numInBank;
-			// ToDo: calling onBankChange needs to happen more frequently.
-			// Need a different criteria. Display does not update properly.
+			// ToDo: calling onBankChange needs to happen continuously for display to
+			// update properly. Not just when bank changes. Update frequency requires
+			// more thought in order to not be too wasteful with bus resources? Maybe
+			// each paramter should be evaluated for a change and only updated if changed?
+			// Meh, it is not so much data after all - maybe just be lazy and always
+			// update everything in current bank...
 			if (this->_bankStart != oldBankStart) {
 				this->_onBankChange();
 			}
+			// ToDo: only update CMD_TRACK_SELECTED if currently selected track is in visible bank
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
@@ -169,6 +179,11 @@ class NiMidiSurface: public BaseSurface {
 					40286, // Track: Go to previous track
 				0);
 				break;
+			// Temporarily disabled until automatic _bankStart is fixed, see above
+			/* case CMD_NAV_BANKS:
+				// Value is -1 or 1.
+				this->_onBankSelect(convertSignedMidiValue(value));
+				break; */
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -177,7 +192,10 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				// ToDo: Scrubbing very slow. Rather than just amplifying this value
+				// have to evaluate incoming MIDI stream to allow for both fine as well
+				// coarse scrubbing
+				CSurf_ScrubAmt(convertSignedMidiValue(value)); 
 				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
@@ -250,11 +268,24 @@ class NiMidiSurface: public BaseSurface {
 		// todo: navigate tracks, navigate banks
 	}
 
-	void _onTrackSelect(unsigned char TrackInBank) {
-		int track = this->_bankStart + TrackInBank;
-		// ToDo: Check if track actually exists (if this is the last bank) and if track <100
-		// Direct track select via Reaper action ends at track 99. Is there a better API call?
+	void _onTrackSelect(unsigned char numInBank) {
+		int track = this->_bankStart + numInBank;
+		// Direct track select via Reaper action ends at track no 99. 
+		// Is there a better API call to allow infinite no of tracks?
+		if ((track < 1) || (track > 99)) {
+			return;
+		}
 		Main_OnCommand(40938 + track, 0);
+	}
+
+	void _onBankSelect(signed char value) {
+		// Manually switch the bank in Mixer View
+		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
+		int numTracks = CSurf_NumTracks(false);
+		if ((newBankStart < 0) || (newBankStart > numTracks)) {
+			return;
+		}
+		this->_bankStart = newBankStart;
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
