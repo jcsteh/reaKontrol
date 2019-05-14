@@ -7,6 +7,9 @@
  * License: GNU General Public License version 2.0
  */
 
+#define DEBUG_DIAGNOSTICS
+#define BASIC_DIAGNOSTICS
+
 #include <string>
 #include <sstream>
 #include <cstring>
@@ -74,6 +77,8 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
+static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
+
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
 signed char convertSignedMidiValue(unsigned char value) {
@@ -107,21 +112,28 @@ class NiMidiSurface: public BaseSurface {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
-			// ToDo: _bankStart should only be changed automatically if incremental
-			// track navigation is used => couple this to CMD_NAV_TRACKS.
+			g_trackInFocus = id;
+			// ToDo: _bankStart should only be changed automatically if focused track has changed.
 			// _bankStart can be manually switched via buttons, see CMD_NAV_BANKS
 			// This allows mixer view to focus on a bank while selected track (and plugin view focus)
-			// is elsewhere. That is a much better behavior than currently.
 			this->_bankStart = id - numInBank;
 			// ToDo: calling onBankChange needs to happen continuously for display to
-			// update properly. Not just when bank changes. Update frequency requires
-			// more thought in order to not be too wasteful with bus resources? Maybe
-			// each paramter should be evaluated for a change and only updated if changed?
-			// Meh, it is not so much data after all - maybe just be lazy and always
-			// update everything in current bank...
+			// update properly. Not just when bank changes.
+			// The bank's status information should probably always be updated completely
+			// when this hooked SetSurfaceSelected is called? Or can we come up with a better
+			// update frequency & criteria? E.g. VU meters periodically (@block], track mute, solo etc
+			// on event xy(?), track selection when SetSurfaceSelected (as it is now) etc.
+			// Needs more thought and probably additional HOOKS besides MIDI events and selection change!
+			
+			
+			this->_onBankChange(); // just a test to constantly update, rename this later to e.g. _bankUpdate
+
+			/*
 			if (this->_bankStart != oldBankStart) {
 				this->_onBankChange();
 			}
+			*/
+
 			// ToDo: only update CMD_TRACK_SELECTED if currently selected track is in visible bank
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
@@ -136,6 +148,17 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
+		
+#ifdef DEBUG_DIAGNOSTICS
+		ostringstream s;
+		s << "Diagnostic: MIDI " << showbase << hex
+			<< (int)event->midi_message[0] << " "
+			<< (int)event->midi_message[1] << " "
+			<< (int)event->midi_message[2] << " Focus Track"
+			<< g_trackInFocus << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
+
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
@@ -222,12 +245,15 @@ class NiMidiSurface: public BaseSurface {
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
+#ifdef BASIC_DIAGNOSTICS
 				ostringstream s;
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
-					<< (int)event->midi_message[2] << endl;
+					<< (int)event->midi_message[2] << " Focus Track"
+					<< g_trackInFocus << endl;
 				ShowConsoleMsg(s.str().c_str());
+#endif
 				break;
 		}
 	}
@@ -269,17 +295,23 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onTrackSelect(unsigned char numInBank) {
-		int track = this->_bankStart + numInBank;
-		// Direct track select via Reaper action ends at track no 99. 
-		// Is there a better API call to allow infinite no of tracks?
-		if ((track < 1) || (track > 99)) {
+		int id = this->_bankStart + numInBank;
+		// ToDo: Now it is Toggle-Select tracks in bank. Change: Should unselect all tracks and select only one
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1;
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); 
+		/* ALTERNATIVE behaviour:
+		// Exclusively select only one track via Reaper action. 
+		// Supports up to 99 tracks
+		if ((id < 1) || (id > 99)) {
 			return;
 		}
-		Main_OnCommand(40938 + track, 0);
+		Main_OnCommand(40938 + id, 0); // Track: Select track xx
+		*/
 	}
 
 	void _onBankSelect(signed char value) {
-		// Manually switch the bank in Mixer View
+		// Manually switch the bank visible in Mixer View
 		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
 		int numTracks = CSurf_NumTracks(false);
 		if ((newBankStart < 0) || (newBankStart > numTracks)) {
