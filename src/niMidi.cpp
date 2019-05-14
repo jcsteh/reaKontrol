@@ -125,10 +125,10 @@ class NiMidiSurface: public BaseSurface {
 			// on event xy(?), track selection when SetSurfaceSelected (as it is now) etc.
 			// Needs more thought and probably additional HOOKS besides MIDI events and selection change!
 			
-			
-			this->_onBankChange(); // just a test to constantly update, rename this later to e.g. _bankUpdate
+			// Refresh bank information every time when a track got selected
+			this->_onBankInfoUpdate(); // renamed from _onBankChange to _onBankInfoUpdate
 
-			/*
+			/* DELETE: this is the old code
 			if (this->_bankStart != oldBankStart) {
 				this->_onBankChange();
 			}
@@ -154,8 +154,9 @@ class NiMidiSurface: public BaseSurface {
 		s << "Diagnostic: MIDI " << showbase << hex
 			<< (int)event->midi_message[0] << " "
 			<< (int)event->midi_message[1] << " "
-			<< (int)event->midi_message[2] << " Focus Track"
-			<< g_trackInFocus << endl;
+			<< (int)event->midi_message[2] << " Focus Track "
+			<< g_trackInFocus << " Bank Start "
+			<< this->_bankStart << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
 
@@ -250,8 +251,7 @@ class NiMidiSurface: public BaseSurface {
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
-					<< (int)event->midi_message[2] << " Focus Track"
-					<< g_trackInFocus << endl;
+					<< (int)event->midi_message[2] << endl;
 				ShowConsoleMsg(s.str().c_str());
 #endif
 				break;
@@ -262,14 +262,19 @@ class NiMidiSurface: public BaseSurface {
 	int _protocolVersion = 0;
 	int _bankStart = -1;
 
-	void _onBankChange() {
+	void _onBankInfoUpdate() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false);
+		int numTracks = GetNumTracks();
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
+			// Mark additional bank tracks as not available
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			for (int i = 7; i > lastInBank; --i) {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+			}
 		}
-		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -291,17 +296,24 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			// todo: level meters, volume, pan
 		}
-		// todo: navigate tracks, navigate banks
+		// todo: navigate tracks, navigate banks. NOTE: probably not here
+	}
+
+	void ClearSelected() {
+		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
+		int iSel = 0;
+		for (int i = 0; i <= GetNumTracks(); i++)
+			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
 	}
 
 	void _onTrackSelect(unsigned char numInBank) {
 		int id = this->_bankStart + numInBank;
-		// ToDo: Now it is Toggle-Select tracks in bank. Change: Should unselect all tracks and select only one
 		MediaTrack* track = CSurf_TrackFromID(id, false);
-		int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1;
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); 
-		/* ALTERNATIVE behaviour:
-		// Exclusively select only one track via Reaper action. 
+		int iSel = 1; // "Select"
+		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; // "Toggle" (instead of "Select")
+		ClearSelected(); 
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+		/* DELETE: PREVIOUS code via Reaper action:
 		// Supports up to 99 tracks
 		if ((id < 1) || (id > 99)) {
 			return;
@@ -313,7 +325,7 @@ class NiMidiSurface: public BaseSurface {
 	void _onBankSelect(signed char value) {
 		// Manually switch the bank visible in Mixer View
 		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
-		int numTracks = CSurf_NumTracks(false);
+		int numTracks = GetNumTracks();
 		if ((newBankStart < 0) || (newBankStart > numTracks)) {
 			return;
 		}
