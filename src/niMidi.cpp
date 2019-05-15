@@ -7,6 +7,9 @@
  * License: GNU General Public License version 2.0
  */
 
+#define DEBUG_DIAGNOSTICS
+#define BASIC_DIAGNOSTICS
+
 #include <string>
 #include <sstream>
 #include <cstring>
@@ -74,6 +77,8 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
+static int g_trackInFocus = 0; // Maybe not the best style to use global variable? Who cares, just used for diagnostics at this point
+
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
 signed char convertSignedMidiValue(unsigned char value) {
@@ -106,23 +111,24 @@ class NiMidiSurface: public BaseSurface {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
-			int oldBankStart = this->_bankStart;
-			// ToDo: _bankStart should only be changed automatically if incremental
-			// track navigation is used => couple this to CMD_NAV_TRACKS.
-			// _bankStart can be manually switched via buttons, see CMD_NAV_BANKS
-			// This allows mixer view to focus on a bank while selected track (and plugin view focus)
-			// is elsewhere. That is a much better behavior than currently.
+			
+			// Just a temporary thingy for diagnsotics	
+			g_trackInFocus = id;
+
+			// Update _bankStart
 			this->_bankStart = id - numInBank;
-			// ToDo: calling onBankChange needs to happen continuously for display to
-			// update properly. Not just when bank changes. Update frequency requires
-			// more thought in order to not be too wasteful with bus resources? Maybe
-			// each paramter should be evaluated for a change and only updated if changed?
-			// Meh, it is not so much data after all - maybe just be lazy and always
-			// update everything in current bank...
-			if (this->_bankStart != oldBankStart) {
-				this->_onBankChange();
-			}
-			// ToDo: only update CMD_TRACK_SELECTED if currently selected track is in visible bank
+
+			// Refresh bank information every time when a track got selected
+			this->_MixerUpdate(); // renamed from _onBankChange to _MixerUpdate
+										
+			// ToDo: The track status information in a bank shall be updated continuously.
+			// Need to investigate additional(!) hooks to update Mixer!
+			// For the time being it is only here, meaning the display will only get updated
+			// on track selection changes.
+			// VU meters may require an even more frequent update than justified for the other
+			// status information. Thus it may require its individual hook (e.g. at every audio block?).
+						
+			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
@@ -136,6 +142,18 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
+		
+#ifdef DEBUG_DIAGNOSTICS
+		ostringstream s;
+		s << "Diagnostic: MIDI " << showbase << hex
+			<< (int)event->midi_message[0] << " "
+			<< (int)event->midi_message[1] << " "
+			<< (int)event->midi_message[2] << " Focus Track "
+			<< g_trackInFocus << " Bank Start "
+			<< this->_bankStart << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
+
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
@@ -178,12 +196,11 @@ class NiMidiSurface: public BaseSurface {
 					40285 : // Track: Go to next track
 					40286, // Track: Go to previous track
 				0);
-				break;
-			// Temporarily disabled until automatic _bankStart is fixed, see above
-			/* case CMD_NAV_BANKS:
+				break;			
+			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
 				this->_onBankSelect(convertSignedMidiValue(value));
-				break; */
+				break; 
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -222,12 +239,14 @@ class NiMidiSurface: public BaseSurface {
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
+#ifdef BASIC_DIAGNOSTICS
 				ostringstream s;
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
 					<< (int)event->midi_message[2] << endl;
 				ShowConsoleMsg(s.str().c_str());
+#endif
 				break;
 		}
 	}
@@ -236,14 +255,19 @@ class NiMidiSurface: public BaseSurface {
 	int _protocolVersion = 0;
 	int _bankStart = -1;
 
-	void _onBankChange() {
+	void _MixerUpdate() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false);
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
+			// Mark additional bank tracks as not available
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			for (int i = 7; i > lastInBank; --i) {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+			}
 		}
-		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -265,27 +289,38 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			// todo: level meters, volume, pan
 		}
-		// todo: navigate tracks, navigate banks
+		// todo: navigate tracks, navigate banks. NOTE: probably not here
+	}
+
+	void ClearSelected() {
+		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
+		int iSel = 0;
+		for (int i = 0; i <= GetNumTracks(); i++) // really ALL tracks, hence no use of CSurf_NumTracks
+			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
 	}
 
 	void _onTrackSelect(unsigned char numInBank) {
-		int track = this->_bankStart + numInBank;
-		// Direct track select via Reaper action ends at track no 99. 
-		// Is there a better API call to allow infinite no of tracks?
-		if ((track < 1) || (track > 99)) {
+		int id = this->_bankStart + numInBank;
+		if (id > GetNumTracks()) {
 			return;
 		}
-		Main_OnCommand(40938 + track, 0);
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+		// If we rather wanted to "Toggle" than just "Select" we would use:
+		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
+		ClearSelected(); 
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
 	}
 
 	void _onBankSelect(signed char value) {
-		// Manually switch the bank in Mixer View
+		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
 		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
-		int numTracks = CSurf_NumTracks(false);
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if ((newBankStart < 0) || (newBankStart > numTracks)) {
 			return;
 		}
 		this->_bankStart = newBankStart;
+		this->_MixerUpdate();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
