@@ -76,8 +76,9 @@ const unsigned char CMD_TOGGLE_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
+const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
-static int g_trackInFocus = 0; // Maybe not the best style to use global variable? Who cares, just used for diagnostics at this point
+static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -126,8 +127,26 @@ class NiMidiSurface: public BaseSurface {
 			// For the time being it is only here, meaning the display will only get updated
 			// on track selection changes.
 			// VU meters may require an even more frequent update than justified for the other
-			// status information. Thus it may require its individual hook (e.g. at every audio block?).
-						
+			// status information. Thus it may require its individual hook (e.g. Run(), see below).
+
+			/* SOME IDEAS for better hooks:
+			virtual void Run() { } // called 30x/sec or so.
+
+	        // these will be called by the host when states change etc
+			virtual void SetTrackListChange() { }
+			virtual void SetSurfaceVolume(MediaTrack *trackid, double volume) { }
+			virtual void SetSurfacePan(MediaTrack *trackid, double pan) { }
+			virtual void SetSurfaceMute(MediaTrack *trackid, bool mute) { }
+			virtual void SetSurfaceSelected(MediaTrack *trackid, bool selected) { }
+			virtual void SetSurfaceSolo(MediaTrack *trackid, bool solo) { }
+			virtual void SetSurfaceRecArm(MediaTrack *trackid, bool recarm) { }
+			virtual void SetPlayState(bool play, bool pause, bool rec) { }
+			virtual void SetRepeatState(bool rep) { }
+			virtual void SetTrackTitle(MediaTrack *trackid, const char *title) { }
+			virtual bool GetTouchState(MediaTrack *trackid, int isPan) { return false; }
+			virtual void SetAutoMode(int mode) { } // automation mode for current track	
+			*/
+
 			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
@@ -272,6 +291,9 @@ class NiMidiSurface: public BaseSurface {
 			if (!track) {
 				break;
 			}
+			// ToDo: In order to consume less time from Reaper and use less interface bandwidth
+			// we could react individually to state changes for these track parameters
+			// rather than polling and updating so much. Need to re-think strategy.
 			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
@@ -325,20 +347,22 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
 		int numInBank = command - CMD_KNOB_VOLUME1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
 			return;
 		}
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value * 0.1, true), nullptr);
+		CSurf_OnVolumeChange(track, dvalue * 0.01, true); 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1;
+		int numInBank = command - CMD_KNOB_PAN1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
 			return;
 		}
-		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value * 1.0, true), nullptr);
+		CSurf_OnPanChange(track, dvalue * 0.001, true);
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
