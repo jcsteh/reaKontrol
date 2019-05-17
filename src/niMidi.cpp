@@ -78,7 +78,7 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
-static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
+static int g_trackInFocus = 0; // Maybe not the best style to use global variable? Leave for now, eliminate later
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -147,12 +147,21 @@ class NiMidiSurface: public BaseSurface {
 			virtual void SetAutoMode(int mode) { } // automation mode for current track	
 			*/
 
+			// Here just for testing:
+			this->_vuMixerUpdate();
+
 			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
 		}
 	}
+	/*
+	virtual void Run() override { 
+		// VU meters
+		this->_vuMixerUpdate();
+	}
+	*/
 
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
@@ -276,7 +285,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _MixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
@@ -312,6 +321,61 @@ class NiMidiSurface: public BaseSurface {
 			// todo: level meters, volume, pan
 		}
 		// todo: navigate tracks, navigate banks. NOTE: probably not here
+	}
+
+	void _vuMixerUpdate() {
+		// VU meters
+		char vuBank[16]; 
+		int j = 0;
+		double peakMidiValue = 0;
+
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;			
+		}		
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			j = 2 * numInBank;
+			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
+			// Code can be cleaned up by putting this into a separate function, leave it for now.
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
+			if (peakMidiValue < 0) { peakMidiValue = 0; }
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j] = static_cast<char>(peakMidiValue);
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 1); // right channel
+			if (peakMidiValue < 0) { peakMidiValue = 0; }
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j+1] = static_cast<char>(peakMidiValue); 
+		}
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank);
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Not fully working yet!!
+
+#ifdef DEBUG_DIAGNOSTICS
+		ostringstream s;
+		s << "Diagnostic: VU " << showbase << hex
+			<< static_cast<int>(vuBank[0]) << " "
+			<< static_cast<int>(vuBank[1]) << " "
+			<< static_cast<int>(vuBank[2]) << " "
+			<< static_cast<int>(vuBank[3]) << " "
+			<< static_cast<int>(vuBank[4]) << " "
+			<< static_cast<int>(vuBank[5]) << " "
+			<< static_cast<int>(vuBank[6]) << " "
+			<< static_cast<int>(vuBank[7]) << " "
+			<< static_cast<int>(vuBank[8]) << " "
+			<< static_cast<int>(vuBank[9]) << " "
+			<< static_cast<int>(vuBank[10]) << " "
+			<< static_cast<int>(vuBank[11]) << " "
+			<< static_cast<int>(vuBank[12]) << " "
+			<< static_cast<int>(vuBank[13]) << " "
+			<< static_cast<int>(vuBank[14]) << " "
+			<< static_cast<int>(vuBank[15]) << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 	}
 
 	void ClearSelected() {
@@ -352,7 +416,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnVolumeChange(track, dvalue * 0.01, true); 
+		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
@@ -362,7 +426,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnPanChange(track, dvalue * 0.001, true);
+		CSurf_OnPanChange(track, dvalue * 0.00098425, true); // scaling by dividing by 127*8 (0.00098425) 
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {

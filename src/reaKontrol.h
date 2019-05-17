@@ -40,6 +40,7 @@
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_Track_GetPeakInfo
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
