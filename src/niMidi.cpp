@@ -147,22 +147,13 @@ class NiMidiSurface: public BaseSurface {
 			virtual void SetAutoMode(int mode) { } // automation mode for current track	
 			*/
 
-			// Here just for testing:
-			this->_vuMixerUpdate();
-
 			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
 		}
 	}
-	/*
-	virtual void Run() override { 
-		// VU meters
-		this->_vuMixerUpdate();
-	}
-	*/
-
+	
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -279,6 +270,40 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void _vuMixerUpdate() override {
+		// VU meters
+		char vuBank[17];
+		int j = 0;
+		double peakMidiValue = 0;
+
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
+		}
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			j = 2 * numInBank;
+			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
+			// Code can be cleaned up by putting this into a separate function, leave it for now.
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
+			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j] = static_cast<char>(peakMidiValue);
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 1); // right channel
+			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j + 1] = static_cast<char>(peakMidiValue);
+		}
+		vuBank[16] = 0; // JUST A TEST - it seems a sort of stop bit/byte is needed here
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank);
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all? Not fully working yet!!
+	}
+
 	private:
 	int _protocolVersion = 0;
 	int _bankStart = -1;
@@ -323,61 +348,6 @@ class NiMidiSurface: public BaseSurface {
 		// todo: navigate tracks, navigate banks. NOTE: probably not here
 	}
 
-	void _vuMixerUpdate() {
-		// VU meters
-		char vuBank[16]; 
-		int j = 0;
-		double peakMidiValue = 0;
-
-		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
-		if (bankEnd > numTracks) {
-			bankEnd = numTracks;			
-		}		
-		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
-			MediaTrack* track = CSurf_TrackFromID(id, false);
-			if (!track) {
-				break;
-			}
-			j = 2 * numInBank;
-			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
-			// Code can be cleaned up by putting this into a separate function, leave it for now.
-			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
-			if (peakMidiValue < 0) { peakMidiValue = 0; }
-			if (peakMidiValue > 127) { peakMidiValue = 127; }
-			vuBank[j] = static_cast<char>(peakMidiValue);
-			peakMidiValue = 127 * Track_GetPeakInfo(track, 1); // right channel
-			if (peakMidiValue < 0) { peakMidiValue = 0; }
-			if (peakMidiValue > 127) { peakMidiValue = 127; }
-			vuBank[j+1] = static_cast<char>(peakMidiValue); 
-		}
-		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank);
-		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Not fully working yet!!
-
-#ifdef DEBUG_DIAGNOSTICS
-		ostringstream s;
-		s << "Diagnostic: VU " << showbase << hex
-			<< static_cast<int>(vuBank[0]) << " "
-			<< static_cast<int>(vuBank[1]) << " "
-			<< static_cast<int>(vuBank[2]) << " "
-			<< static_cast<int>(vuBank[3]) << " "
-			<< static_cast<int>(vuBank[4]) << " "
-			<< static_cast<int>(vuBank[5]) << " "
-			<< static_cast<int>(vuBank[6]) << " "
-			<< static_cast<int>(vuBank[7]) << " "
-			<< static_cast<int>(vuBank[8]) << " "
-			<< static_cast<int>(vuBank[9]) << " "
-			<< static_cast<int>(vuBank[10]) << " "
-			<< static_cast<int>(vuBank[11]) << " "
-			<< static_cast<int>(vuBank[12]) << " "
-			<< static_cast<int>(vuBank[13]) << " "
-			<< static_cast<int>(vuBank[14]) << " "
-			<< static_cast<int>(vuBank[15]) << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
-	}
-
 	void ClearSelected() {
 		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
 		int iSel = 0;
@@ -387,7 +357,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onTrackSelect(unsigned char numInBank) {
 		int id = this->_bankStart + numInBank;
-		if (id > GetNumTracks()) {
+		if (id > CSurf_NumTracks(false)) {
 			return;
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);

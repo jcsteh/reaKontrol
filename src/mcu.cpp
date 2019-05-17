@@ -103,6 +103,10 @@ class McuSurface: public BaseSurface {
 		this->_sendRaw(message);
 	}
 
+	void _vuMixerUpdate() override {
+		// DUMMY. This has to to with the current file structure. Maybe better to move Run() callback into niMidi.cpp and mcu.cpp
+	}
+
 	private:
 	void _sendRaw(const string& message) {
 		// MIDI_event_t includes 4 bytes for the message, but we need more.

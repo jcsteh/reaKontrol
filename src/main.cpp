@@ -145,6 +145,7 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
+	this->_vuMixerUpdate(); // TEST
 	if (!this->_midiIn) {
 		return;
 	}

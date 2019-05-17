@@ -59,6 +59,7 @@ class BaseSurface: public IReaperControlSurface {
 	midi_Input* _midiIn = nullptr;
 	midi_Output* _midiOut = nullptr;
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
+	virtual void _vuMixerUpdate() = 0;
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
