@@ -112,41 +112,21 @@ class NiMidiSurface: public BaseSurface {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
-			
-			// Just a temporary thingy for diagnsotics	
-			g_trackInFocus = id;
-
-			// Update _bankStart
+			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
+			if (this->_bankStart != oldBankStart) {
+				this->_allMixerUpdate();
+			}
 
-			// Refresh bank information every time when a track got selected
-			this->_MixerUpdate(); // renamed from _onBankChange to _MixerUpdate
-										
-			// ToDo: The track status information in a bank shall be updated continuously.
-			// Need to investigate additional(!) hooks to update Mixer!
-			// For the time being it is only here, meaning the display will only get updated
-			// on track selection changes.
-			// VU meters may require an even more frequent update than justified for the other
-			// status information. Thus it may require its individual hook (e.g. Run(), see below).
-
-			/* SOME IDEAS for better hooks:
-			virtual void Run() { } // called 30x/sec or so.
-
-	        // these will be called by the host when states change etc
-			virtual void SetTrackListChange() { }
-			virtual void SetSurfaceVolume(MediaTrack *trackid, double volume) { }
-			virtual void SetSurfacePan(MediaTrack *trackid, double pan) { }
-			virtual void SetSurfaceMute(MediaTrack *trackid, bool mute) { }
-			virtual void SetSurfaceSelected(MediaTrack *trackid, bool selected) { }
-			virtual void SetSurfaceSolo(MediaTrack *trackid, bool solo) { }
-			virtual void SetSurfaceRecArm(MediaTrack *trackid, bool recarm) { }
-			virtual void SetPlayState(bool play, bool pause, bool rec) { }
-			virtual void SetRepeatState(bool rep) { }
-			virtual void SetTrackTitle(MediaTrack *trackid, const char *title) { }
-			virtual bool GetTouchState(MediaTrack *trackid, int isPan) { return false; }
-			virtual void SetAutoMode(int mode) { } // automation mode for current track	
-			*/
-
+			// ====================================================================
+			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
+			// We abuse the SetSurfaceSelected callback to update the entire Mixer
+			// on every track selection change. This will be removed as soon as the 
+			// proper callbacks per parameter are in place
+			g_trackInFocus = id; // a temporary thingy for diagnsotics	
+			this->_allMixerUpdate(); 
+			// ====================================================================
+			
 			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
@@ -274,7 +254,7 @@ class NiMidiSurface: public BaseSurface {
 	int _protocolVersion = 0;
 	int _bankStart = -1;
 
-	void _MixerUpdate() {
+	void _allMixerUpdate() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
@@ -291,9 +271,6 @@ class NiMidiSurface: public BaseSurface {
 			if (!track) {
 				break;
 			}
-			// ToDo: In order to consume less time from Reaper and use less interface bandwidth
-			// we could react individually to state changes for these track parameters
-			// rather than polling and updating so much. Need to re-think strategy.
 			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
@@ -323,7 +300,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onTrackSelect(unsigned char numInBank) {
 		int id = this->_bankStart + numInBank;
-		if (id > GetNumTracks()) {
+		if (id > CSurf_NumTracks(false)) {
 			return;
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
@@ -342,7 +319,7 @@ class NiMidiSurface: public BaseSurface {
 			return;
 		}
 		this->_bankStart = newBankStart;
-		this->_MixerUpdate();
+		this->_allMixerUpdate();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
