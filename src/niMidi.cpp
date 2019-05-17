@@ -256,7 +256,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _allMixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
@@ -329,7 +329,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnVolumeChange(track, dvalue * 0.01, true); 
+		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
@@ -339,7 +339,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnPanChange(track, dvalue * 0.001, true);
+		CSurf_OnPanChange(track, dvalue * 0.00098425, true); // scaling by dividing by 127*8 (0.00098425)
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
