@@ -7,7 +7,6 @@
  * License: GNU General Public License version 2.0
  */
 
-#define DEBUG_DIAGNOSTICS
 #define BASIC_DIAGNOSTICS
 
 #include <string>
@@ -78,7 +77,6 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
-static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -123,7 +121,6 @@ class NiMidiSurface: public BaseSurface {
 			// We abuse the SetSurfaceSelected callback to update the entire Mixer
 			// on every track selection change. This will be removed as soon as the 
 			// proper callbacks per parameter are in place
-			g_trackInFocus = id; // a temporary thingy for diagnsotics	
 			this->_allMixerUpdate(); 
 			// ====================================================================
 			
@@ -141,17 +138,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
-		
-#ifdef DEBUG_DIAGNOSTICS
-		ostringstream s;
-		s << "Diagnostic: MIDI " << showbase << hex
-			<< (int)event->midi_message[0] << " "
-			<< (int)event->midi_message[1] << " "
-			<< (int)event->midi_message[2] << " Focus Track "
-			<< g_trackInFocus << " Bank Start "
-			<< this->_bankStart << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
 
 		switch (command) {
 			case CMD_HELLO:
@@ -329,7 +315,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
+		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874)
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
