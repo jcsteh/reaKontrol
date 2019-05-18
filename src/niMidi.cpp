@@ -78,7 +78,7 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
-static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
+static int g_trackInFocus = 0; // Maybe not the best style to use global variable? Leave for now, eliminate later
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -133,7 +133,7 @@ class NiMidiSurface: public BaseSurface {
 				getKkInstanceName(track));
 		}
 	}
-
+	
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -248,6 +248,40 @@ class NiMidiSurface: public BaseSurface {
 #endif
 				break;
 		}
+	}
+
+	void _vuMixerUpdate() override {
+		// VU meters
+		char vuBank[17];
+		int j = 0;
+		double peakMidiValue = 0;
+
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
+		}
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			j = 2 * numInBank;
+			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
+			// Code can be cleaned up by putting this into a separate function, leave it for now.
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
+			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j] = static_cast<char>(peakMidiValue);
+			peakMidiValue = 127 * Track_GetPeakInfo(track, 1); // right channel
+			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
+			if (peakMidiValue > 127) { peakMidiValue = 127; }
+			vuBank[j + 1] = static_cast<char>(peakMidiValue);
+		}
+		vuBank[16] = 0; // JUST A TEST - it seems a sort of stop bit/byte is needed here
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank);
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all? Not fully working yet!!
 	}
 
 	private:

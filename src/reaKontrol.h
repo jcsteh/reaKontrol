@@ -40,6 +40,7 @@
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_Track_GetPeakInfo
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
@@ -58,6 +59,7 @@ class BaseSurface: public IReaperControlSurface {
 	midi_Input* _midiIn = nullptr;
 	midi_Output* _midiOut = nullptr;
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
+	virtual void _vuMixerUpdate() = 0;
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
