@@ -132,8 +132,8 @@ static unsigned char panToChar(double pan)
 static  unsigned char vuPeakToChar(double vol)
 {
 	double d = (DB2SLIDER(VAL2DB(vol) - 52.0));  // Specific calibration for KK Mk2
-	if (d < 0.0)d = 0.0;
-	else if (d > 127.0)d = 127.0;
+	if (d < 0.0)d = 0.0; // Consider setting it to 0.5 because of KK special interpretation of the 0
+	else if (d > 127.0)d = 127.0; // Consider setting it to 126.5
 
 	return (unsigned char)(d + 0.5);
 }
@@ -345,7 +345,7 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}
 		vuBank[16] = 0; // JUST A TEST - it seems a sort of stop bit/byte is needed here. See also initialization above
-		this->_sendSysex(CMD_TRACK_VU, 2, 2, vuBank); // do the params have anything to do with calibration?
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank); // do the params have anything to do with calibration?
 		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all? Maybe we have to reference last track in bank to indicate end of updates?
 	}
 
