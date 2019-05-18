@@ -129,6 +129,15 @@ static unsigned char panToChar(double pan)
 }
 // End of conversion functions (C) 2006-2008 Cockos Incorporated
 
+static  unsigned char vuPeakToChar(double vol)
+{
+	double d = (DB2SLIDER(VAL2DB(vol) - 52.0));  // Specific calibration for KK Mk2
+	if (d < 0.0)d = 0.0;
+	else if (d > 127.0)d = 127.0;
+
+	return (unsigned char)(d + 0.5);
+}
+
 class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
@@ -291,11 +300,19 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _vuMixerUpdate() override {
-		// VU meters
-		char vuBank[17]; 
+		// VU meters		
+		char vuBank[17]; // INIT??? = { 0 };
 		int j = 0;
-		double peakMidiValue = 0;
+		double peakValue = 0;
 
+		//ToDo: Peak levels of muted tracks should NOT be polled at all
+		//ToDo: Calibration to 0dB. If we calibrate in conversion function (~900.0 vs 1000.0 we are off at low levels)
+		//       maybe calibrate before calling conversion or in first WDL conversion VAL2DB
+		//       TRY FIRST: Use directly VAL2DB conversion
+		//ToDo: Clean up array Initialization , stop byte, array size, CMD_SEL_TRACK_PARAMS_CHANGED
+		
+		vuBank[0] = 1; // there will alway be a master track
+		vuBank[1] = 1;
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
@@ -308,21 +325,28 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			}
 			j = 2 * numInBank;
-			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
-			// Code can be cleaned up by putting this into a separate function, leave it for now.
-			// Also: Avoid any conversion if track volume is silent (save CPU)
-			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
-			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
-			if (peakMidiValue > 127) { peakMidiValue = 127; }
-			vuBank[j] = static_cast<char>(peakMidiValue);
-			peakMidiValue = 127 * Track_GetPeakInfo(track, 1); // right channel
-			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
-			if (peakMidiValue > 127) { peakMidiValue = 127; }
-			vuBank[j + 1] = static_cast<char>(peakMidiValue);
+			peakValue = Track_GetPeakInfo(track, 0); // left channel
+			if (peakValue == 0) {
+				// No log conversion necessary
+				vuBank[j] = 1; // if 0 then channels further to the right are ignored by KK display
+			}
+			else {
+				vuBank[j] = vuPeakToChar(peakValue);
+				if (vuBank[j] == 0) { vuBank[j] = 1; } // if 0 then channels further to the right are ignored by KK display
+			}
+			peakValue = Track_GetPeakInfo(track, 1); // right channel
+			if (peakValue == 0) {
+				// No log conversion necessary
+				vuBank[j+1] = 1; // if 0 then channels further to the right are ignored by KK display
+			}
+			else {
+				vuBank[j+1] = vuPeakToChar(peakValue);
+				if (vuBank[j+1] == 0) { vuBank[j+1] = 1; } // if 0 then channels further to the right are ignored by KK display
+			}
 		}
-		vuBank[16] = 0; // JUST A TEST - it seems a sort of stop bit/byte is needed here
-		this->_sendSysex(CMD_TRACK_VU, 2, 0, vuBank);
-		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all? Not fully working yet!!
+		vuBank[16] = 0; // JUST A TEST - it seems a sort of stop bit/byte is needed here. See also initialization above
+		this->_sendSysex(CMD_TRACK_VU, 2, 2, vuBank); // do the params have anything to do with calibration?
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all? Maybe we have to reference last track in bank to indicate end of updates?
 	}
 
 	private:
@@ -381,6 +405,7 @@ class NiMidiSurface: public BaseSurface {
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
 		// If we rather wanted to "Toggle" than just "Select" we would use:
+		// int iSel = 0;
 		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		ClearSelected(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
