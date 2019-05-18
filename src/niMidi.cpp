@@ -89,6 +89,46 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
+// The following conversion functions (C) 2006-2008 Cockos Incorporated
+// Note: Keep static for now
+static double charToVol(unsigned char val)
+{
+	double pos = ((double)val*1000.0) / 127.0;
+	pos = SLIDER2DB(pos);
+	return DB2VAL(pos);
+
+}
+
+static  unsigned char volToChar(double vol)
+{
+	double d = (DB2SLIDER(VAL2DB(vol))*127.0 / 1000.0);
+	if (d < 0.0)d = 0.0;
+	else if (d > 127.0)d = 127.0;
+
+	return (unsigned char)(d + 0.5);
+}
+
+static double charToPan(unsigned char val)
+{
+	double pos = ((double)val*1000.0 + 0.5) / 127.0;
+
+	pos = (pos - 500.0) / 500.0;
+	if (fabs(pos) < 0.08) pos = 0.0;
+
+	return pos;
+}
+
+static unsigned char panToChar(double pan)
+{
+	pan = (pan + 1.0)*63.5;
+
+	if (pan < 0.0)pan = 0.0;
+	else if (pan > 127.0)pan = 127.0;
+
+	return (unsigned char)(pan + 0.5);
+}
+// End of conversion functions (C) 2006-2008 Cockos Incorporated
+
 class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
@@ -252,7 +292,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _vuMixerUpdate() override {
 		// VU meters
-		char vuBank[17];
+		char vuBank[17]; 
 		int j = 0;
 		double peakMidiValue = 0;
 
@@ -270,6 +310,7 @@ class NiMidiSurface: public BaseSurface {
 			j = 2 * numInBank;
 			// ToDo: Will require some log conversion (not just multiply) for KK meter to mirror Reaper meter.
 			// Code can be cleaned up by putting this into a separate function, leave it for now.
+			// Also: Avoid any conversion if track volume is silent (save CPU)
 			peakMidiValue = 127 * Track_GetPeakInfo(track, 0); // left channel
 			if (peakMidiValue < 1) { peakMidiValue = 1; } // if 0 then channels further to the right are ignored !
 			if (peakMidiValue > 127) { peakMidiValue = 127; }
