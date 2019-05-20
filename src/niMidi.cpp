@@ -89,6 +89,72 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
+// The following conversion functions (C) 2006-2008 Cockos Incorporated
+// Note: Keep static for now
+// Eliminate those that will eventually not be used (e.g. volToChar)
+static double charToVol(unsigned char val)
+{
+	double pos = ((double)val*1000.0) / 127.0;
+	pos = SLIDER2DB(pos);
+	return DB2VAL(pos);
+
+}
+
+static unsigned char volToChar(double vol)
+{
+	double d = (DB2SLIDER(VAL2DB(vol))*127.0 / 1000.0);
+	if (d < 0.0)d = 0.0;
+	else if (d > 127.0)d = 127.0;
+
+	return (unsigned char)(d + 0.5);
+}
+
+static double charToPan(unsigned char val)
+{
+	double pos = ((double)val*1000.0 + 0.5) / 127.0;
+
+	pos = (pos - 500.0) / 500.0;
+	if (fabs(pos) < 0.08) pos = 0.0;
+
+	return pos;
+}
+
+static unsigned char panToChar(double pan)
+{
+	pan = (pan + 1.0)*63.5;
+
+	if (pan < 0.0)pan = 0.0;
+	else if (pan > 127.0)pan = 127.0;
+
+	return (unsigned char)(pan + 0.5);
+}
+// End of conversion functions (C) 2006-2008 Cockos Incorporated
+
+static double KK_Mk2_Display_Transform(double x_in)
+{
+	// Scale from approx -92dB (MIDI value = #1) to +5dB (MIDI value = #127)
+	// IMPORTANT: KK Mk2 meter scale intervals are NOT linear!
+	// Midi #107 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
+	double temp;
+	temp = 0.0;
+	double a = 1.4188776691241778E+00;
+	double b = 4.1718814064260904E-03;
+	double c = 1.3365905415325063E+01;
+	temp = pow(a + b * x_in, c);
+	return temp;
+}
+
+static unsigned char peakToChar(double vol)
+{
+	double d = KK_Mk2_Display_Transform(VAL2DB(vol)); // Non-linear calibration to KK Mk2
+													  // For a faster less CPU intensive calculation:
+													  // double d = (DB2SLIDER(VAL2DB(vol) - 52.0));  // Approximate, linear calibration for KK Mk2
+	if (d < 0.0)d = 0.0; 
+	else if (d > 127.0)d = 127.0; 
+
+	return (unsigned char)(d + 0.5);
+}
+
 class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
@@ -133,7 +199,7 @@ class NiMidiSurface: public BaseSurface {
 				getKkInstanceName(track));
 		}
 	}
-
+	
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -247,6 +313,60 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void _peakMixerUpdate() override {
+		// Peak meters. Note: Reaper reports peak, NOT VU	
+
+		// ToDo: Peak Hold in KK display shall be erased when changing bank or when no signal at all
+		// ToDo: Explore the necessity of CMD_SEL_TRACK_PARAMS_CHANGED and if last parameter (string) shall be the last track in bank
+		char peakBank[17] = { 0 }; // For some reason there must be this additional char peakBank[16] and it must be set to 0
+		int j = 0;
+		double peakValue = 0;		
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
+		}
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			j = 2 * numInBank;
+			// Muted tracks still report peak levels => ignore these
+			if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+				peakBank[j] = 1;
+				peakBank[j+1] = 1;
+			}
+			else {
+				peakValue = Track_GetPeakInfo(track, 0); // left channel
+				if (peakValue < 0.0000000298023223876953125) {
+					// No log conversion necessary if < -150dB
+					peakBank[j] = 1; // if 0 then channels further to the right are ignored by KK display
+				}
+				else {
+					peakBank[j] = peakToChar(peakValue);
+					if (peakBank[j] == 0) { peakBank[j] = 1; } // if 0 then channels further to the right are ignored by KK display
+				}
+				peakValue = Track_GetPeakInfo(track, 1); // right channel
+				if (peakValue < 0.0000000298023223876953125) {
+					// No log conversion necessary if < -150dB
+					peakBank[j + 1] = 1; // if 0 then channels further to the right are ignored by KK display
+				}
+				else {
+					peakBank[j + 1] = peakToChar(peakValue);
+					if (peakBank[j + 1] == 0) { peakBank[j + 1] = 1; } // if 0 then channels further to the right are ignored by KK display
+				}
+			}
+		}	
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank); 
+		/*
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all?
+															  // Maybe we have to reference last track in bank to indicate end of updates?
+															  // Or, if the meter for only one track shall be changed this is indicated here
+		*/
+	}
+
 	private:
 	int _protocolVersion = 0;
 	int _bankStart = -1;
@@ -302,8 +422,9 @@ class NiMidiSurface: public BaseSurface {
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
-		// If we rather wanted to "Toggle" than just "Select" we would use:
-		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
+					  // If we rather wanted to "Toggle" than just "Select" we would use:
+					  // int iSel = 0;
+					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		ClearSelected(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
 	}
