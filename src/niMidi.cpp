@@ -78,7 +78,14 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
+// State Information
+// Uses:
+// - save CPU and MIDI bus resources by avoiding unnecessary updates or state information calls
+// - filtering (e.g. lowpass smoothing) of values
+// ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
+static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
+static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -90,8 +97,7 @@ signed char convertSignedMidiValue(unsigned char value) {
 }
 
 // The following conversion functions (C) 2006-2008 Cockos Incorporated
-// Note: Keep static for now
-// Eliminate those that will eventually not be used (e.g. volToChar)
+// ToDo: Eliminate those that will eventually not be used (e.g. volToChar)
 static double charToVol(unsigned char val)
 {
 	double pos = ((double)val*1000.0) / 127.0;
@@ -188,8 +194,8 @@ class NiMidiSurface: public BaseSurface {
 			// ====================================================================
 			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
 			// We abuse the SetSurfaceSelected callback to update the entire Mixer
-			// on every track selection change. This will be removed as soon as the 
-			// proper callbacks per parameter are in place
+			// on every track selection change.
+			// ToDo: Remove this block as soon as the proper callbacks per parameter are in place
 			this->_allMixerUpdate(); 
 			// ====================================================================
 			
@@ -316,9 +322,10 @@ class NiMidiSurface: public BaseSurface {
 	void _peakMixerUpdate() override {
 		// Peak meters. Note: Reaper reports peak, NOT VU	
 
-		// ToDo: Peak Hold in KK display shall be erased when changing bank or when no signal at all
-		// ToDo: Explore the necessity of CMD_SEL_TRACK_PARAMS_CHANGED and if last parameter (string) shall be the last track in bank
-		char peakBank[17] = { 0 }; // For some reason there must be this additional char peakBank[16] and it must be set to 0
+		// ToDo: Peak Hold in KK display shall be erased when changing bank or when no signal at all.
+		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
+		
+		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 }; // There must be an additional char peakBank[16] and it must be set to 0
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -359,12 +366,7 @@ class NiMidiSurface: public BaseSurface {
 				}
 			}
 		}	
-		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank); 
-		/*
-		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0); // Needed at all?
-															  // Maybe we have to reference last track in bank to indicate end of updates?
-															  // Or, if the meter for only one track shall be changed this is indicated here
-		*/
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
 	}
 
 	private:
