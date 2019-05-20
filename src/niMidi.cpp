@@ -7,6 +7,8 @@
  * License: GNU General Public License version 2.0
  */
 
+#define BASIC_DIAGNOSTICS
+
 #include <string>
 #include <sstream>
 #include <cstring>
@@ -73,6 +75,9 @@ const unsigned char CMD_TOGGLE_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
+const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
+
+static int g_trackInFocus = 0;
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -105,12 +110,23 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
+			g_trackInFocus = id;
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
 			if (this->_bankStart != oldBankStart) {
-				this->_onBankChange();
+				this->_allMixerUpdate();
 			}
+
+			// ====================================================================
+			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
+			// We abuse the SetSurfaceSelected callback to update the entire Mixer
+			// on every track selection change. This will be removed as soon as the 
+			// proper callbacks per parameter are in place
+			this->_allMixerUpdate(); 
+			// ====================================================================
+			
+			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
@@ -124,22 +140,30 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
+		
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
+				// Toggles between play and pause
 				CSurf_OnPlay();
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
-				CSurf_OnPlay();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					CSurf_OnPlay();
+				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
+				break;
+			case CMD_LOOP:
+				Main_OnCommand(1068, 0); // Transport: Toggle repeat
 				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
@@ -155,11 +179,12 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40285 : // Track: Go to next track
-					40286, // Track: Go to previous track
-				0);
-				break;
+				this->_onTrackNav(convertSignedMidiValue(value));
+				break;			
+			case CMD_NAV_BANKS:
+				// Value is -1 or 1.
+				this->_onBankSelect(convertSignedMidiValue(value));
+				break; 
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -168,7 +193,14 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				// ToDo: Scrubbing very slow. Rather than just amplifying this value
+				// have to evaluate incoming MIDI stream to allow for both fine as well
+				// coarse scrubbing
+				CSurf_ScrubAmt(convertSignedMidiValue(value)); 
+				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
 				break;
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -191,12 +223,14 @@ class NiMidiSurface: public BaseSurface {
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
+#ifdef BASIC_DIAGNOSTICS
 				ostringstream s;
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
 					<< (int)event->midi_message[2] << endl;
 				ShowConsoleMsg(s.str().c_str());
+#endif
 				break;
 		}
 	}
@@ -205,14 +239,19 @@ class NiMidiSurface: public BaseSurface {
 	int _protocolVersion = 0;
 	int _bankStart = -1;
 
-	void _onBankChange() {
+	void _allMixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false);
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
+			// Mark additional bank tracks as not available
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			for (int i = 7; i > lastInBank; --i) {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+			}
 		}
-		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -234,21 +273,71 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			// todo: level meters, volume, pan
 		}
-		// todo: navigate tracks, navigate banks
+		// todo: navigate tracks, navigate banks. NOTE: probably not here
+	}
+
+	void ClearSelected() {
+		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
+		int iSel = 0;
+		for (int i = 0; i <= GetNumTracks(); i++) // really ALL tracks, hence no use of CSurf_NumTracks
+			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
+	}
+
+	void _onTrackSelect(unsigned char numInBank) {
+		int id = this->_bankStart + numInBank;
+		if (id > CSurf_NumTracks(false)) {
+			return;
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+		// If we rather wanted to "Toggle" than just "Select" we would use:
+		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
+		ClearSelected(); 
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
+	}
+
+	void _onTrackNav(signed char value) {
+		// Move to next/previous track relative to currently focused track = last selected track
+		if (((g_trackInFocus <= 1) && (value < 0)) ||
+			((g_trackInFocus >= CSurf_NumTracks(false))) && (value >0 )) {
+			return;
+		}
+		int id = g_trackInFocus + value;
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+		ClearSelected();
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+	}
+
+	void _onBankSelect(signed char value) {
+		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
+		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if ((newBankStart < 0) || (newBankStart > numTracks)) {
+			return;
+		}
+		this->_bankStart = newBankStart;
+		this->_allMixerUpdate();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value * 0.1, true), nullptr);
+		if (!track) {
+			return;
+		}
+		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_PAN1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
-		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value * 1.0, true), nullptr);
+		if (!track) {
+			return;
+		}
+		CSurf_OnPanChange(track, dvalue * 0.00098425, true); // scaling by dividing by 127*8 (0.00098425)
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {

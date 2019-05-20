@@ -18,9 +18,11 @@
 #define REAPERAPI_WANT_GetMIDIOutputName
 #define REAPERAPI_WANT_CreateMIDIInput
 #define REAPERAPI_WANT_CreateMIDIOutput
+#define REAPERAPI_WANT_GetNumTracks
 #define REAPERAPI_WANT_CSurf_NumTracks
 #define REAPERAPI_WANT_CSurf_TrackToID
 #define REAPERAPI_WANT_CSurf_TrackFromID
+#define REAPERAPI_WANT_CSurf_OnTrackSelection
 #define REAPERAPI_WANT_GetLastTouchedTrack
 #define REAPERAPI_WANT_CSurf_OnPlay
 #define REAPERAPI_WANT_ShowConsoleMsg
@@ -37,6 +39,7 @@
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
+#define REAPERAPI_WANT_GetPlayState
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
