@@ -78,7 +78,7 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
-static int g_trackInFocus = 0; // Maybe not the best style to use global variable?
+static int g_trackInFocus = 0;
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -111,6 +111,7 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
+			g_trackInFocus = id;
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
@@ -123,7 +124,6 @@ class NiMidiSurface: public BaseSurface {
 			// We abuse the SetSurfaceSelected callback to update the entire Mixer
 			// on every track selection change. This will be removed as soon as the 
 			// proper callbacks per parameter are in place
-			g_trackInFocus = id; // a temporary thingy for diagnsotics	
 			this->_allMixerUpdate(); 
 			// ====================================================================
 			
@@ -191,10 +191,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40285 : // Track: Go to next track
-					40286, // Track: Go to previous track
-				0);
+				this->_onTrackNav(convertSignedMidiValue(value));
 				break;			
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
@@ -309,6 +306,19 @@ class NiMidiSurface: public BaseSurface {
 		// int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		ClearSelected(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
+	}
+
+	void _onTrackNav(signed char value) {
+		// Move to next/previous track relative to currently focused track = last selected track
+		if (((g_trackInFocus <= 1) && (value < 0)) ||
+			((g_trackInFocus >= CSurf_NumTracks(false))) && (value >0 )) {
+			return;
+		}
+		int id = g_trackInFocus + value;
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+		ClearSelected();
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
 	void _onBankSelect(signed char value) {
