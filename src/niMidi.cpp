@@ -142,10 +142,10 @@ static double KK_Mk2_Display_Transform(double x_in)
 	// Midi #107 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
 	double temp;
 	temp = 0.0;
-	double a = 1.4188776691241778E+00;
-	double b = 4.1718814064260904E-03;
-	double c = 1.3365905415325063E+01;
-	temp = pow(a + b * x_in, c);
+	double a = 3.4825646584552920E+15;
+	double b = -2.4473819019771705E+04;
+	double c = 7.8669055129218032E+02;
+	temp = a * exp(b / (x_in + c)); // efficiency improvement over previous use of pow()
 	return temp;
 }
 
