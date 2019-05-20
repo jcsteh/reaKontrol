@@ -7,7 +7,6 @@
  * License: GNU General Public License version 2.0
  */
 
-#define DEBUG_DIAGNOSTICS
 #define BASIC_DIAGNOSTICS
 
 #include <string>
@@ -214,17 +213,6 @@ class NiMidiSurface: public BaseSurface {
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
 		
-#ifdef DEBUG_DIAGNOSTICS
-		ostringstream s;
-		s << "Diagnostic: MIDI " << showbase << hex
-			<< (int)event->midi_message[0] << " "
-			<< (int)event->midi_message[1] << " "
-			<< (int)event->midi_message[2] << " Focus Track "
-			<< g_trackInFocus << " Bank Start "
-			<< this->_bankStart << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
-
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
