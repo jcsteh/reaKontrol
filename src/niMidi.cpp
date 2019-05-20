@@ -262,6 +262,7 @@ class NiMidiSurface: public BaseSurface {
 				// Rather, these actions are relative to last TOUCHED track. E.g. if volume fader is changed on a non selected track
 				// and then we navigate the new track will be next to the track with the volume fader touched
 				// => Use dedicated track navigation via API, not actions
+				// OK: Ready for pulling a fix
 				// -------------------------------------------------------------------------------------------
 				Main_OnCommand(value == 1 ?
 					40285 : // Track: Go to next track
