@@ -103,8 +103,8 @@ class McuSurface: public BaseSurface {
 		this->_sendRaw(message);
 	}
 
-	void _vuMixerUpdate() override {
-		// DUMMY. This has to to with the current file structure. Maybe better to move Run() callback into niMidi.cpp and mcu.cpp
+	void _peakMixerUpdate() override {
+		// DUMMY. Currently only implemented for niMiDi (Mk2). Maybe better to move Run() callback into niMidi.cpp and mcu.cpp?
 	}
 
 	private:
