@@ -7,6 +7,8 @@
  * License: GNU General Public License version 2.0
  */
 
+#define BASIC_DIAGNOSTICS
+
 #include <string>
 #include <sstream>
 #include <cstring>
@@ -73,6 +75,16 @@ const unsigned char CMD_TOGGLE_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
+const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
+
+// State Information
+// Uses:
+// - save CPU and MIDI bus resources by avoiding unnecessary updates or state information calls
+// - filtering (e.g. lowpass smoothing) of values
+// ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
+static int g_trackInFocus = 0;
+static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
+static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -82,6 +94,71 @@ signed char convertSignedMidiValue(unsigned char value) {
 	}
 	return value - 128;
 }
+
+//-----------------------------------------------------------------------------------------------------------------------
+// The following conversion functions (C) 2006-2008 Cockos Incorporated
+// ToDo: Eliminate those that will eventually not be used (e.g. volToChar)
+static double charToVol(unsigned char val)
+{
+	double pos = ((double)val*1000.0) / 127.0;
+	pos = SLIDER2DB(pos);
+	return DB2VAL(pos);
+
+}
+
+static unsigned char volToChar(double vol)
+{
+	double d = (DB2SLIDER(VAL2DB(vol))*127.0 / 1000.0);
+	if (d < 0.0)d = 0.0;
+	else if (d > 127.0)d = 127.0;
+
+	return (unsigned char)(d + 0.5);
+}
+
+static double charToPan(unsigned char val)
+{
+	double pos = ((double)val*1000.0 + 0.5) / 127.0;
+
+	pos = (pos - 500.0) / 500.0;
+	if (fabs(pos) < 0.08) pos = 0.0;
+
+	return pos;
+}
+
+static unsigned char panToChar(double pan)
+{
+	pan = (pan + 1.0)*63.5;
+
+	if (pan < 0.0)pan = 0.0;
+	else if (pan > 127.0)pan = 127.0;
+
+	return (unsigned char)(pan + 0.5);
+}
+// End of conversion functions (C) 2006-2008 Cockos Incorporated
+//-----------------------------------------------------------------------------------------------------------------------
+
+static unsigned char peakToChar_KkMk2(double peak)
+{
+	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
+	// Contrary to Reaper Peak Meters the dB interval spacing on KK Mk2 displays is NOT linear.
+	// It is assumed that other NI Keyboards use the same scaling for the meters.
+	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
+	double result = 0.0;
+	double a = -3.2391538612390192E+01;
+	double b = 3.0673618643561021E+01;
+	double c = 8.6720798984917224E+01;
+	double d = 4.4920143012996103E+00;
+	if (peak > 0.00398107170553497250770252305088) {
+		result = a + b * log(c * peak + d); // KK Mk2 display has meaningful resolution only above -48dB
+	}
+	else {
+		result = peak * 4019; // linear approximation below -48dB
+	}
+	if (result < 0.5) result = 0.5; // if the returned value is 0 then channels further to the right are ignored by KK display!
+	else if (result  > 126.5) result = 126.5;
+	return (unsigned char)(result + 0.5); // rounding and make sure that minimum value returned is 1
+}
+
 
 class NiMidiSurface: public BaseSurface {
 	public:
@@ -105,18 +182,29 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
+			g_trackInFocus = id;
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
 			if (this->_bankStart != oldBankStart) {
-				this->_onBankChange();
+				this->_allMixerUpdate();
 			}
+
+			// ====================================================================
+			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
+			// We abuse the SetSurfaceSelected callback to update the entire Mixer
+			// on every track selection change.
+			// ToDo: Remove this block as soon as the proper callbacks per parameter are in place
+			this->_allMixerUpdate(); 
+			// ====================================================================
+			
+			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 				getKkInstanceName(track));
 		}
 	}
-
+	
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -124,22 +212,30 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
+		
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
+				// Toggles between play and pause
 				CSurf_OnPlay();
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
-				CSurf_OnPlay();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					CSurf_OnPlay();
+				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
+				break;
+			case CMD_LOOP:
+				Main_OnCommand(1068, 0); // Transport: Toggle repeat
 				break;
 			case CMD_METRO:
 				Main_OnCommand(40364, 0); // Options: Toggle metronome
@@ -155,11 +251,12 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40285 : // Track: Go to next track
-					40286, // Track: Go to previous track
-				0);
-				break;
+				this->_onTrackNav(convertSignedMidiValue(value));
+				break;			
+			case CMD_NAV_BANKS:
+				// Value is -1 or 1.
+				this->_onBankSelect(convertSignedMidiValue(value));
+				break; 
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -168,7 +265,14 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				// ToDo: Scrubbing very slow. Rather than just amplifying this value
+				// have to evaluate incoming MIDI stream to allow for both fine as well
+				// coarse scrubbing
+				CSurf_ScrubAmt(convertSignedMidiValue(value)); 
+				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
 				break;
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -191,28 +295,87 @@ class NiMidiSurface: public BaseSurface {
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
+#ifdef BASIC_DIAGNOSTICS
 				ostringstream s;
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
 					<< (int)event->midi_message[2] << endl;
 				ShowConsoleMsg(s.str().c_str());
+#endif
 				break;
 		}
+	}
+
+	void _peakMixerUpdate() override {
+		// Peak meters. Note: Reaper reports peak, NOT VU	
+
+		// ToDo: Peak Hold in KK display shall be erased immediately when changing bank
+		// ToDo: Peak Hold in KK display shall be erased after decay time t when track muted or no signal.
+		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
+		
+		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
+		// A value of 0 will result in stopping to refresh meters further to right.
+		// The array needs one additional char at peakBank[16] set to 0 as a "end of string" marker.
+		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 };
+		int j = 0;
+		double peakValue = 0;		
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
+		}
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			j = 2 * numInBank;
+			// Muted tracks still report peak levels => ignore these
+			if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+				peakBank[j] = 1;
+				peakBank[j+1] = 1;
+			}
+			else {
+				peakValue = Track_GetPeakInfo(track, 0); // left channel
+				if (peakValue < 0.0000000298023223876953125) {
+					// No log conversion necessary if < -150dB
+					peakBank[j] = 1; // if 0 then channels further to the right are ignored by KK display
+				}
+				else {
+					peakBank[j] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127
+				}
+				peakValue = Track_GetPeakInfo(track, 1); // right channel
+				if (peakValue < 0.0000000298023223876953125) {
+					// No log conversion necessary if < -150dB
+					peakBank[j + 1] = 1; // if 0 then channels further to the right are ignored by KK display
+				}
+				else {
+					peakBank[j + 1] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127					
+				}
+			}
+		}	
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
 	}
 
 	private:
 	int _protocolVersion = 0;
 	int _bankStart = -1;
 
-	void _onBankChange() {
+	void _allMixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false);
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
+			// Mark additional bank tracks as not available
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			for (int i = 7; i > lastInBank; --i) {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+			}
 		}
-		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -234,21 +397,72 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			// todo: level meters, volume, pan
 		}
-		// todo: navigate tracks, navigate banks
+		// todo: navigate tracks, navigate banks. NOTE: probably not here
+	}
+
+	void ClearSelected() {
+		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
+		int iSel = 0;
+		for (int i = 0; i <= GetNumTracks(); i++) // really ALL tracks, hence no use of CSurf_NumTracks
+			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
+	}
+
+	void _onTrackSelect(unsigned char numInBank) {
+		int id = this->_bankStart + numInBank;
+		if (id > CSurf_NumTracks(false)) {
+			return;
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+					  // If we rather wanted to "Toggle" than just "Select" we would use:
+					  // int iSel = 0;
+					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
+		ClearSelected(); 
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
+	}
+
+	void _onTrackNav(signed char value) {
+		// Move to next/previous track relative to currently focused track = last selected track
+		if (((g_trackInFocus <= 1) && (value < 0)) ||
+			((g_trackInFocus >= CSurf_NumTracks(false))) && (value >0 )) {
+			return;
+		}
+		int id = g_trackInFocus + value;
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int iSel = 1; // "Select"
+		ClearSelected();
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+	}
+
+	void _onBankSelect(signed char value) {
+		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
+		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if ((newBankStart < 0) || (newBankStart > numTracks)) {
+			return;
+		}
+		this->_bankStart = newBankStart;
+		this->_allMixerUpdate();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_VOLUME1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value * 0.1, true), nullptr);
+		if (!track) {
+			return;
+		}
+		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1 + 1;
+		int numInBank = command - CMD_KNOB_PAN1;
+		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
-		if (!track) return;
-		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value * 1.0, true), nullptr);
+		if (!track) {
+			return;
+		}
+		CSurf_OnPanChange(track, dvalue * 0.00098425, true); // scaling by dividing by 127*8 (0.00098425)
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
