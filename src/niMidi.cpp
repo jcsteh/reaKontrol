@@ -95,6 +95,7 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
+//-----------------------------------------------------------------------------------------------------------------------
 // The following conversion functions (C) 2006-2008 Cockos Incorporated
 // ToDo: Eliminate those that will eventually not be used (e.g. volToChar)
 static double charToVol(unsigned char val)
@@ -134,31 +135,30 @@ static unsigned char panToChar(double pan)
 	return (unsigned char)(pan + 0.5);
 }
 // End of conversion functions (C) 2006-2008 Cockos Incorporated
+//-----------------------------------------------------------------------------------------------------------------------
 
-static double KK_Mk2_Display_Transform(double x_in)
+static unsigned char peakToChar_KkMk2(double peak)
 {
-	// Scale from approx -92dB (MIDI value = #1) to +5dB (MIDI value = #127)
-	// IMPORTANT: KK Mk2 meter scale intervals are NOT linear!
-	// Midi #107 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
-	double temp;
-	temp = 0.0;
-	double a = 3.4825646584552920E+15;
-	double b = -2.4473819019771705E+04;
-	double c = 7.8669055129218032E+02;
-	temp = a * exp(b / (x_in + c)); // efficiency improvement over previous use of pow()
-	return temp;
+	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
+	// Contrary to Reaper Peak Meters the dB interval spacing on KK Mk2 displays is NOT linear.
+	// It is assumed that other NI Keyboards use the same scaling for the meters.
+	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
+	double result = 0.0;
+	double a = -3.2391538612390192E+01;
+	double b = 3.0673618643561021E+01;
+	double c = 8.6720798984917224E+01;
+	double d = 4.4920143012996103E+00;
+	if (peak > 0.00398107170553497250770252305088) {
+		result = a + b * log(c * peak + d); // KK Mk2 display has meaningful resolution only above -48dB
+	}
+	else {
+		result = peak * 4019; // linear approximation below -48dB
+	}
+	if (result < 0.5) result = 0.5; // if the returned value is 0 then channels further to the right are ignored by KK display!
+	else if (result  > 126.5) result = 126.5;
+	return (unsigned char)(result + 0.5); // rounding and make sure that minimum value returned is 1
 }
 
-static unsigned char peakToChar(double vol)
-{
-	double d = KK_Mk2_Display_Transform(VAL2DB(vol)); // Non-linear calibration to KK Mk2
-													  // For a faster less CPU intensive calculation:
-													  // double d = (DB2SLIDER(VAL2DB(vol) - 52.0));  // Approximate, linear calibration for KK Mk2
-	if (d < 0.0)d = 0.0; 
-	else if (d > 127.0)d = 127.0; 
-
-	return (unsigned char)(d + 0.5);
-}
 
 class NiMidiSurface: public BaseSurface {
 	public:
@@ -310,10 +310,14 @@ class NiMidiSurface: public BaseSurface {
 	void _peakMixerUpdate() override {
 		// Peak meters. Note: Reaper reports peak, NOT VU	
 
-		// ToDo: Peak Hold in KK display shall be erased when changing bank or when no signal at all.
+		// ToDo: Peak Hold in KK display shall be erased immediately when changing bank
+		// ToDo: Peak Hold in KK display shall be erased after decay time t when track muted or no signal.
 		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
 		
-		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 }; // There must be an additional char peakBank[16] and it must be set to 0
+		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
+		// A value of 0 will result in stopping to refresh meters further to right.
+		// The array needs one additional char at peakBank[16] set to 0 as a "end of string" marker.
+		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 };
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -340,8 +344,7 @@ class NiMidiSurface: public BaseSurface {
 					peakBank[j] = 1; // if 0 then channels further to the right are ignored by KK display
 				}
 				else {
-					peakBank[j] = peakToChar(peakValue);
-					if (peakBank[j] == 0) { peakBank[j] = 1; } // if 0 then channels further to the right are ignored by KK display
+					peakBank[j] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127
 				}
 				peakValue = Track_GetPeakInfo(track, 1); // right channel
 				if (peakValue < 0.0000000298023223876953125) {
@@ -349,8 +352,7 @@ class NiMidiSurface: public BaseSurface {
 					peakBank[j + 1] = 1; // if 0 then channels further to the right are ignored by KK display
 				}
 				else {
-					peakBank[j + 1] = peakToChar(peakValue);
-					if (peakBank[j + 1] == 0) { peakBank[j + 1] = 1; } // if 0 then channels further to the right are ignored by KK display
+					peakBank[j + 1] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127					
 				}
 			}
 		}	
