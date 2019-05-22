@@ -138,25 +138,31 @@ static unsigned char panToChar(double pan)
 // End of conversion functions (C) 2006-2008 Cockos Incorporated
 //-----------------------------------------------------------------------------------------------------------------------
 
-static unsigned char peakToChar_KkMk2(double peak)
-{
+static unsigned char peakToChar_KkMk2(double peak) {
 	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
 	// Contrary to Reaper Peak Meters the dB interval spacing on KK Mk2 displays is NOT linear.
 	// It is assumed that other NI Keyboards use the same scaling for the meters.
-	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB
+	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
+
+	constexpr double minus48dB = 0.00398107170553497250;
+	constexpr double minus96dB = 1.5848931924611134E-05;
+	constexpr double m = (16.0 - 2.0) / (minus48dB - minus96dB);
+	constexpr double n = 16.0 - m * minus48dB;
+	constexpr double a = -3.2391538612390192E+01;
+	constexpr double b = 3.0673618643561021E+01;
+	constexpr double c = 8.6720798984917224E+01;
+	constexpr double d = 4.4920143012996103E+00;
 	double result = 0.0;
-	double a = -3.2391538612390192E+01;
-	double b = 3.0673618643561021E+01;
-	double c = 8.6720798984917224E+01;
-	double d = 4.4920143012996103E+00;
-	if (peak > 0.00398107170553497250770252305088) {
+	if (peak > minus48dB) {
 		result = a + b * log(c * peak + d); // KK Mk2 display has meaningful resolution only above -48dB
 	}
-	else {
-		result = peak * 4019; // linear approximation below -48dB
+	else if (peak > minus96dB) {
+		result = m * peak + n; // linear approximation between -96dB and -48dB
 	}
-	if (result < 0.5) result = 0.5; // if the returned value is 0 then channels further to the right are ignored by KK display!
-	else if (result  > 126.5) result = 126.5;
+	else {
+		result = 0.5; // will be rounded to 1
+	}
+	if (result > 126.5) result = 126.5;
 	return (unsigned char)(result + 0.5); // rounding and make sure that minimum value returned is 1
 }
 
@@ -351,21 +357,9 @@ class NiMidiSurface: public BaseSurface {
 			}
 			else {
 				peakValue = Track_GetPeakInfo(track, 0); // left channel
-				if (peakValue < 0.0000000298023223876953125) {
-					// No log conversion necessary if < -150dB
-					peakBank[j] = 1; // if 0 then channels further to the right are ignored by KK display
-				}
-				else {
-					peakBank[j] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127
-				}
+				peakBank[j] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127
 				peakValue = Track_GetPeakInfo(track, 1); // right channel
-				if (peakValue < 0.0000000298023223876953125) {
-					// No log conversion necessary if < -150dB
-					peakBank[j + 1] = 1; // if 0 then channels further to the right are ignored by KK display
-				}
-				else {
-					peakBank[j + 1] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127					
-				}
+				peakBank[j + 1] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127					
 			}
 		}	
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
