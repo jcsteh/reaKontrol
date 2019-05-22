@@ -54,22 +54,22 @@ const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
 const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
-const unsigned char CMD_KNOB_VOLUME1 = 0x50;
-const unsigned char CMD_KNOB_VOLUME2 = 0x51;
-const unsigned char CMD_KNOB_VOLUME3 = 0x52;
-const unsigned char CMD_KNOB_VOLUME4 = 0x53;
-const unsigned char CMD_KNOB_VOLUME5 = 0x54;
-const unsigned char CMD_KNOB_VOLUME6 = 0x55;
-const unsigned char CMD_KNOB_VOLUME7 = 0x56;
-const unsigned char CMD_KNOB_VOLUME8 = 0x57;
-const unsigned char CMD_KNOB_PAN1 = 0x58;
-const unsigned char CMD_KNOB_PAN2 = 0x59;
-const unsigned char CMD_KNOB_PAN3 = 0x5a;
-const unsigned char CMD_KNOB_PAN4 = 0x5b;
-const unsigned char CMD_KNOB_PAN5 = 0x5c;
-const unsigned char CMD_KNOB_PAN6 = 0x5d;
-const unsigned char CMD_KNOB_PAN7 = 0x5e;
-const unsigned char CMD_KNOB_PAN8 = 0x5f;
+const unsigned char CMD_KNOB_VOLUME0 = 0x50;
+const unsigned char CMD_KNOB_VOLUME1 = 0x51;
+const unsigned char CMD_KNOB_VOLUME2 = 0x52;
+const unsigned char CMD_KNOB_VOLUME3 = 0x53;
+const unsigned char CMD_KNOB_VOLUME4 = 0x54;
+const unsigned char CMD_KNOB_VOLUME5 = 0x55;
+const unsigned char CMD_KNOB_VOLUME6 = 0x56;
+const unsigned char CMD_KNOB_VOLUME7 = 0x57;
+const unsigned char CMD_KNOB_PAN0 = 0x58;
+const unsigned char CMD_KNOB_PAN1 = 0x59;
+const unsigned char CMD_KNOB_PAN2 = 0x5a;
+const unsigned char CMD_KNOB_PAN3 = 0x5b;
+const unsigned char CMD_KNOB_PAN4 = 0x5c;
+const unsigned char CMD_KNOB_PAN5 = 0x5d;
+const unsigned char CMD_KNOB_PAN6 = 0x5e;
+const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_CHANGE_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
@@ -84,8 +84,8 @@ const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track 
 // - filtering (e.g. lowpass smoothing) of values
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
-static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
-static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
+// static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
+// static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -96,9 +96,38 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
-// Convert signed char into decimal ASCII string
-char* signedCharToAsciiString(signed char) {
-	static char s[5];
+// Convert dB value to decimal ASCII string
+char* dbToAsciiStringDB(double val) {
+	char ascii[10] = { '0','1','2','3','4','5','6','7','8','9' };
+	static char s[9] = { ' ',' ', ' ', ' ' , '.' , ' ' , 'd' , 'B' , '\0' };
+	int db_10 = (int)(val * 10.0);
+		
+	if (db_10 < 0) { 
+		s[0] = '-';
+		db_10 = -(db_10);
+	}
+	else { s[0] = ' '; }
+	
+	int c1000 = db_10 / 1000; int m1000 = c1000 * 1000;
+	int c100 = (db_10 - m1000) / 100; int m100 = c100 * 100;
+	int c10 = (db_10 - m1000 - m100) / 10; int m10 = c10 * 10;
+	int c1 = db_10 - m1000 - m100 - m10;
+	
+	if (c1000) {
+		s[1] = ascii[c1000];
+		s[2] = ascii[c100];
+	}
+	else {
+		s[1] = ' ';
+		if (c100) {
+			s[2] = ascii[c100];
+		}
+		else {
+			s[2] = ' ';
+		}
+	}
+	s[3] = ascii[c10];
+	s[5] = ascii[c1];
 	return s;
 }
 
@@ -300,24 +329,24 @@ class NiMidiSurface: public BaseSurface {
 				// Select a track from current bank in Mixer Mode with top row buttons
 				this->_onTrackSelect(value);
 				break;
+			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
 			case CMD_KNOB_VOLUME3:
 			case CMD_KNOB_VOLUME4:
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:
-			case CMD_KNOB_VOLUME8:
+			case CMD_KNOB_VOLUME7:			
 				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
 				break;
+			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
 			case CMD_KNOB_PAN2:
 			case CMD_KNOB_PAN3:
 			case CMD_KNOB_PAN4:
 			case CMD_KNOB_PAN5:
 			case CMD_KNOB_PAN6:
-			case CMD_KNOB_PAN7:
-			case CMD_KNOB_PAN8:
+			case CMD_KNOB_PAN7:			
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
@@ -407,15 +436,10 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
-
-			//-------------------------------------------
-			// ToDo: Update Volume text and Volume marker
 			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
-			//char vol[2] = { volToChar_KkMk2(volume), 0 };
-			//if (vol[0] != g_volBank_last[numInBank]) {
-			//	this->_sendSysex(CMD_TRACK_VOLUME_CHANGED, 0, numInBank, vol);
-			//	g_volBank_last[numInBank] = vol[0];
-			//}
+			// ToDo: to save MIDI bandwidth consider checking against table with previous volumes to decide if an update is needed
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, dbToAsciiStringDB(VAL2DB(volume)));
+			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume)); 
 			//-------------------------------------------
 			// ToDo: Update Pan text and Pan marker
 			//-------------------------------------------
@@ -476,7 +500,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1;
+		int numInBank = command - CMD_KNOB_VOLUME0;
 		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
@@ -486,7 +510,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_PAN1;
+		int numInBank = command - CMD_KNOB_PAN0;
 		double dvalue = static_cast<double>(value);
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
