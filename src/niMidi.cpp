@@ -50,8 +50,8 @@ const unsigned char CMD_TRACK_SELECTED = 0x42;
 const unsigned char CMD_TRACK_MUTED = 0x43;
 const unsigned char CMD_TRACK_SOLOED = 0x44;
 const unsigned char CMD_TRACK_ARMED = 0x45;
-const unsigned char CMD_TRACK_VOLUME_CHANGED = 0x46;
-const unsigned char CMD_TRACK_PAN_CHANGED = 0x47;
+const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
+const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
 const unsigned char CMD_KNOB_VOLUME1 = 0x50;
@@ -96,6 +96,12 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
+// Convert signed char into decimal ASCII string
+char* signedCharToAsciiString(signed char) {
+	static char s[5];
+	return s;
+}
+
 //-----------------------------------------------------------------------------------------------------------------------
 // The following conversion functions (C) 2006-2008 Cockos Incorporated
 // ToDo: Eliminate those that will eventually not be used (e.g. volToChar)
@@ -138,9 +144,9 @@ static unsigned char panToChar(double pan)
 // End of conversion functions (C) 2006-2008 Cockos Incorporated
 //-----------------------------------------------------------------------------------------------------------------------
 
-static unsigned char peakToChar_KkMk2(double peak) {
+static unsigned char volToChar_KkMk2(double volume) {
 	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
-	// Contrary to Reaper Peak Meters the dB interval spacing on KK Mk2 displays is NOT linear.
+	// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
 	// It is assumed that other NI Keyboards use the same scaling for the meters.
 	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
 
@@ -153,11 +159,11 @@ static unsigned char peakToChar_KkMk2(double peak) {
 	constexpr double c = 8.6720798984917224E+01;
 	constexpr double d = 4.4920143012996103E+00;
 	double result = 0.0;
-	if (peak > minus48dB) {
-		result = a + b * log(c * peak + d); // KK Mk2 display has meaningful resolution only above -48dB
+	if (volume > minus48dB) {
+		result = a + b * log(c * volume + d); // KK Mk2 display has meaningful resolution only above -48dB
 	}
-	else if (peak > minus96dB) {
-		result = m * peak + n; // linear approximation between -96dB and -48dB
+	else if (volume > minus96dB) {
+		result = m * volume + n; // linear approximation between -96dB and -48dB
 	}
 	else {
 		result = 0.5; // will be rounded to 1
@@ -185,6 +191,8 @@ class NiMidiSurface: public BaseSurface {
 	virtual const char* GetDescString() override {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
+
+	// ToDo: If the tracklist changes, we always need to call _allMixerUpdate because the change may (or may not) affect the currently visible bank
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
@@ -333,9 +341,10 @@ class NiMidiSurface: public BaseSurface {
 		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
 		
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
-		// A value of 0 will result in stopping to refresh meters further to right.
-		// The array needs one additional char at peakBank[16] set to 0 as a "end of string" marker.
+		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
+		// The array needs one additional char at peakBank[16] set as "end of string" marker.
 		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 };
+		peakBank[16] = '\0'; 
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -343,6 +352,8 @@ class NiMidiSurface: public BaseSurface {
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			peakBank[(lastInBank +1) * 2] = '\0'; // end of string (no tracks available further to the right)
 		}
 		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
@@ -357,11 +368,12 @@ class NiMidiSurface: public BaseSurface {
 			}
 			else {
 				peakValue = Track_GetPeakInfo(track, 0); // left channel
-				peakBank[j] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127
+				peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
 				peakValue = Track_GetPeakInfo(track, 1); // right channel
-				peakBank[j + 1] = peakToChar_KkMk2(peakValue); // returns value between 1 and 127					
+				peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
 			}
 		}	
+		peakBank[j + 2] = '\0';
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
 	}
 
@@ -395,7 +407,19 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
-			// todo: volume text, pan text
+
+			//-------------------------------------------
+			// ToDo: Update Volume text and Volume marker
+			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
+			//char vol[2] = { volToChar_KkMk2(volume), 0 };
+			//if (vol[0] != g_volBank_last[numInBank]) {
+			//	this->_sendSysex(CMD_TRACK_VOLUME_CHANGED, 0, numInBank, vol);
+			//	g_volBank_last[numInBank] = vol[0];
+			//}
+			//-------------------------------------------
+			// ToDo: Update Pan text and Pan marker
+			//-------------------------------------------
+
 			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
