@@ -79,11 +79,11 @@ const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
 
 // State Information
-// Uses:
-// - save CPU and MIDI bus resources by avoiding unnecessary updates or state information calls
-// - filtering (e.g. lowpass smoothing) of values
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
+// Other potential uses:
+// - save CPU and MIDI bus resources by avoiding unnecessary updates or state information calls
+// - filtering (e.g. lowpass smoothing) of values
 // static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
 // static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
 
@@ -100,7 +100,7 @@ signed char convertSignedMidiValue(unsigned char value) {
 char* dbToAsciiStringDB(double val) {
 	char ascii[10] = { '0','1','2','3','4','5','6','7','8','9' };
 	static char s[9] = { ' ',' ', ' ', ' ' , '.' , ' ' , 'd' , 'B' , '\0' };
-	int db_10 = (int)(val * 10.0);
+	int db_10 = (int)(val * 10.0); // one decimal point accuracy. No rounding.
 		
 	if (db_10 < 0) { 
 		s[0] = '-';
@@ -133,7 +133,7 @@ char* dbToAsciiStringDB(double val) {
 
 //-----------------------------------------------------------------------------------------------------------------------
 // The following conversion functions (C) 2006-2008 Cockos Incorporated
-// ToDo: Eliminate those that will eventually not be used (e.g. volToChar)
+// ToDo: Eliminate those that will eventually not be used (e.g. volToChar), also from header file
 static double charToVol(unsigned char val)
 {
 	double pos = ((double)val*1000.0) / 127.0;
@@ -173,12 +173,11 @@ static unsigned char panToChar(double pan)
 // End of conversion functions (C) 2006-2008 Cockos Incorporated
 //-----------------------------------------------------------------------------------------------------------------------
 
+// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
+// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
+// It is assumed that other NI Keyboards use the same scaling for the meters.
+// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
 static unsigned char volToChar_KkMk2(double volume) {
-	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
-	// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
-	// It is assumed that other NI Keyboards use the same scaling for the meters.
-	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
-
 	constexpr double minus48dB = 0.00398107170553497250;
 	constexpr double minus96dB = 1.5848931924611134E-05;
 	constexpr double m = (16.0 - 2.0) / (minus48dB - minus96dB);
@@ -233,7 +232,7 @@ class NiMidiSurface: public BaseSurface {
 			if (this->_bankStart != oldBankStart) {
 				this->_allMixerUpdate();
 			}
-
+#ifdef DEBUG_DIAGNOSTICS
 			// ====================================================================
 			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
 			// We abuse the SetSurfaceSelected callback to update the entire Mixer
@@ -241,7 +240,7 @@ class NiMidiSurface: public BaseSurface {
 			// ToDo: Remove this block as soon as the proper callbacks per parameter are in place
 			this->_allMixerUpdate(); 
 			// ====================================================================
-			
+#endif			
 			// Let Keyboard know about changed track selection 
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
@@ -249,7 +248,19 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 	
-	protected:
+	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
+		int id = CSurf_TrackToID(track, false);
+		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, dbToAsciiStringDB(VAL2DB(volume)));
+			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume * 1.05925));
+		}
+	}
+
+
+	// ToDo: Light up buttons for transport control et al (both ways, i.e. callbacks from Reaper GUI as well as when triggered from Keyboard)
+	
+protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
@@ -371,9 +382,9 @@ class NiMidiSurface: public BaseSurface {
 		
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
-		// The array needs one additional char at peakBank[16] set as "end of string" marker.
+		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
 		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 };
-		peakBank[16] = '\0'; 
+		peakBank[(BANK_NUM_TRACKS * 2)] = '\0'; // "end of string" marker
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -402,7 +413,6 @@ class NiMidiSurface: public BaseSurface {
 				peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
 			}
 		}	
-		peakBank[j + 2] = '\0';
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
 	}
 
@@ -437,9 +447,8 @@ class NiMidiSurface: public BaseSurface {
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
 			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
-			// ToDo: to save MIDI bandwidth consider checking against table with previous volumes to decide if an update is needed
 			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, dbToAsciiStringDB(VAL2DB(volume)));
-			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume)); 
+			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume * 1.05925));
 			//-------------------------------------------
 			// ToDo: Update Pan text and Pan marker
 			//-------------------------------------------
@@ -472,7 +481,7 @@ class NiMidiSurface: public BaseSurface {
 					  // int iSel = 0;
 					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		ClearSelected(); 
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);		
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); // Could we instead use CSurf_OnTrackSelection?
 	}
 
 	void _onTrackNav(signed char value) {
@@ -485,7 +494,7 @@ class NiMidiSurface: public BaseSurface {
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
 		ClearSelected();
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); // We could also probably use CSurf_OnTrackSelection		
 	}
 
 	void _onBankSelect(signed char value) {
@@ -506,7 +515,9 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnVolumeChange(track, dvalue * 0.007874, true); // scaling by dividing by 127 (0.007874) 
+		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, dvalue * 0.007874, true), nullptr); 
+		// scaling by dividing by 127 (0.007874)
+		// ToDo: non linear behaviour especially in the lower volumes would be preferable. 
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
@@ -516,7 +527,8 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnPanChange(track, dvalue * 0.00098425, true); // scaling by dividing by 127*8 (0.00098425)
+		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, dvalue * 0.00098425, true), nullptr); 
+		// scaling by dividing by 127*8 (0.00098425)
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
