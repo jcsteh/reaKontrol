@@ -222,6 +222,16 @@ class NiMidiSurface: public BaseSurface {
 
 	// ToDo: If the tracklist changes, we always need to call _allMixerUpdate because the change may (or may not) affect the currently visible bank
 
+	// ToDo: Consider using OnTrackSelection() rather than SetSurfaceSelected.
+	// Reason: SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks)
+	// It seems, however, that SetSurfaceSelected() may be the more robust choice because according to other people's 
+	// findings OnTrackSelection() does not work in many situations, e.g. when track is selected via an action! The latter
+	// is quite common, however, and thus we may have to stick to SetSurfaceSelected().
+	// See: https://github.com/reaper-oss/sws/blob/6963f7563851c8dd919db426bae825843939077f/sws_extension.cpp#L528
+	// Remark: The naming of OnTrackSelection() is confusing because typically this would indicate a call from the plugin to
+	// Reaper to update the project (just like other calls like OnVolumeChange(), OnPlay(), .. etc) .
+	// When something changes in the project Reaper typically calls functions starting with Set, hence SetTrackSelected()
+	// seems more logical.
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
@@ -481,7 +491,7 @@ protected:
 					  // int iSel = 0;
 					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		ClearSelected(); 
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); // Could we instead use CSurf_OnTrackSelection?
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
 	void _onTrackNav(signed char value) {
@@ -494,7 +504,7 @@ protected:
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
 		ClearSelected();
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel); // We could also probably use CSurf_OnTrackSelection		
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
 	void _onBankSelect(signed char value) {
