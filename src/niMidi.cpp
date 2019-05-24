@@ -102,6 +102,27 @@ class NiMidiSurface: public BaseSurface {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
 
+	virtual void SetPlayState(bool play, bool pause, bool rec) override {
+		// Update transport button lights
+		this->_sendCc(CMD_REC, rec ? 1 : 0);
+		if (pause) {
+			// since there is no Pause button on KK we indicate it with both Play and Stop lit
+			this->_sendCc(CMD_PLAY, 1);
+			this->_sendCc(CMD_STOP, 1);
+		} else if (play) {
+			this->_sendCc(CMD_PLAY, 1);
+			this->_sendCc(CMD_STOP, 0);
+		} else {
+			this->_sendCc(CMD_PLAY, 0);
+			this->_sendCc(CMD_STOP, 1);
+		}
+	}
+
+	virtual void SetRepeatState(bool rep) override {
+		// Update repeat (aka loop) button light
+		this->_sendCc(CMD_LOOP, rep ? 1 : 0);
+	}
+
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
