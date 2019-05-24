@@ -38,6 +38,8 @@
 #define REAPERAPI_WANT_CSurf_SetTrackListChange
 #define REAPERAPI_WANT_CSurf_SetSurfaceVolume
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
+#define REAPERAPI_WANT_CSurf_SetPlayState
+#define REAPERAPI_WANT_CSurf_SetRepeatState
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_GetPlayState
