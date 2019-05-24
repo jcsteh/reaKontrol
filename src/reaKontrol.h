@@ -35,6 +35,7 @@
 #define REAPERAPI_WANT_Main_OnCommand
 #define REAPERAPI_WANT_CSurf_ScrubAmt
 #define REAPERAPI_WANT_GetSetMediaTrackInfo
+#define REAPERAPI_WANT_CSurf_SetTrackListChange
 #define REAPERAPI_WANT_CSurf_SetSurfaceVolume
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
