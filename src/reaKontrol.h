@@ -18,9 +18,11 @@
 #define REAPERAPI_WANT_GetMIDIOutputName
 #define REAPERAPI_WANT_CreateMIDIInput
 #define REAPERAPI_WANT_CreateMIDIOutput
+#define REAPERAPI_WANT_GetNumTracks
 #define REAPERAPI_WANT_CSurf_NumTracks
 #define REAPERAPI_WANT_CSurf_TrackToID
 #define REAPERAPI_WANT_CSurf_TrackFromID
+#define REAPERAPI_WANT_CSurf_OnTrackSelection
 #define REAPERAPI_WANT_GetLastTouchedTrack
 #define REAPERAPI_WANT_CSurf_OnPlay
 #define REAPERAPI_WANT_ShowConsoleMsg
@@ -33,12 +35,18 @@
 #define REAPERAPI_WANT_Main_OnCommand
 #define REAPERAPI_WANT_CSurf_ScrubAmt
 #define REAPERAPI_WANT_GetSetMediaTrackInfo
+#define REAPERAPI_WANT_CSurf_SetTrackListChange
 #define REAPERAPI_WANT_CSurf_SetSurfaceVolume
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
+#define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_Track_GetPeakInfo
+#define REAPERAPI_WANT_DB2SLIDER
+#define REAPERAPI_WANT_SLIDER2DB
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
+#include <reaper/WDL/db2val.h>
 
 const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
@@ -55,6 +63,7 @@ class BaseSurface: public IReaperControlSurface {
 	midi_Input* _midiIn = nullptr;
 	midi_Output* _midiOut = nullptr;
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
+	virtual void _peakMixerUpdate() = 0;
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
