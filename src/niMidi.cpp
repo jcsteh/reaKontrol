@@ -220,18 +220,31 @@ class NiMidiSurface: public BaseSurface {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
 
-	// ToDo: If the tracklist changes, we always need to call _allMixerUpdate because the change may (or may not) affect the currently visible bank
+	// If tracklist changes update Mixer View and ensure sanity of track and bank focus
+	virtual void SetTrackListChange() override {
+		int numTracks = CSurf_NumTracks(false);
+		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
+		if (g_trackInFocus > numTracks) {
+			g_trackInFocus = numTracks; 
+			// Unfortunately we cannot afford to explicitly select the last track automatically because this could screw up
+			// running actions or macros. The plugin may not manipulate track selection without the user deliberately triggering
+			// track selection/navigation on the keyboard (or from within Reaper).
+		}
+		// Protect against loosing bank focus. Set focus on last bank in this case.
+		if (this->_bankStart > numTracks) {
+			int lastInBank = numTracks % BANK_NUM_TRACKS;
+			this->_bankStart = numTracks - lastInBank;
+		}
+		// If no track is selected at all (e.g. if previously selected track got removed), then this will now also show up in the
+		// Mixer View. However, KK instance focus may still be present! This can be a little bit confusing for the user as typically
+		// the track holding the focused KK instance will also be selected. This situation gets resolved as soon as any form of
+		// track navigation/selection happens (from keyboard or from within Reaper).
+		this->_allMixerUpdate();
+	}
 
-	// ToDo: Consider using OnTrackSelection() rather than SetSurfaceSelected.
-	// Reason: SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks)
-	// It seems, however, that SetSurfaceSelected() may be the more robust choice because according to other people's 
-	// findings OnTrackSelection() does not work in many situations, e.g. when track is selected via an action! The latter
-	// is quite common, however, and thus we may have to stick to SetSurfaceSelected().
-	// See: https://github.com/reaper-oss/sws/blob/6963f7563851c8dd919db426bae825843939077f/sws_extension.cpp#L528
-	// Remark: The naming of OnTrackSelection() is confusing because typically this would indicate a call from the plugin to
-	// Reaper to update the project (just like other calls like OnVolumeChange(), OnPlay(), .. etc) .
-	// When something changes in the project Reaper typically calls functions starting with Set, hence SetTrackSelected()
-	// seems more logical.
+	// Using SetSurfaceSelected() rather than OnTrackSelection():
+	// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
+	// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
@@ -496,8 +509,13 @@ protected:
 
 	void _onTrackNav(signed char value) {
 		// Move to next/previous track relative to currently focused track = last selected track
+		int numTracks = CSurf_NumTracks(false);
+		// Backstop measure to protect against unreported track removal that was not captured in SetTrackListChange callback due to race condition
+		if (g_trackInFocus > numTracks) { 
+			g_trackInFocus = numTracks; 
+		}
 		if (((g_trackInFocus <= 1) && (value < 0)) ||
-			((g_trackInFocus >= CSurf_NumTracks(false))) && (value >0 )) {
+			((g_trackInFocus >= numTracks) && (value >0 ))) {
 			return;
 		}
 		int id = g_trackInFocus + value;
