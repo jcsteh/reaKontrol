@@ -220,6 +220,41 @@ class NiMidiSurface: public BaseSurface {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
 
+	// Update transport button lights
+	virtual void SetPlayState(bool play, bool pause, bool rec) override {
+		if (rec) {
+			this->_sendCc(CMD_REC, 1);
+		}
+		else {
+			this->_sendCc(CMD_REC, 0);
+		}
+		if (pause) {
+			this->_sendCc(CMD_PLAY, 1);
+			this->_sendCc(CMD_STOP, 1); // since there is no Pause button on KK we indicate it with both Play and Stop lit
+		}
+		else if (play) {
+			this->_sendCc(CMD_PLAY, 1);
+			this->_sendCc(CMD_STOP, 0);
+		}
+		else {
+			this->_sendCc(CMD_PLAY, 0);
+			this->_sendCc(CMD_STOP, 1);
+		}
+	}
+
+	// Update repeat (aka loop) button light
+	virtual void SetRepeatState(bool rep) override {
+		if (rep) {
+			this->_sendCc(CMD_LOOP, 1);
+		}
+		else {
+			this->_sendCc(CMD_LOOP, 0);
+		}
+	}
+
+	// ToDo: add more button lights: METRO, AUTO, tbd: undo/redo, clear, quantize, tempo
+	// ToDo: mute and solo buttons for the selected track should be handled in their dedicated calls
+
 	// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 	virtual void SetTrackListChange() override {
 		int numTracks = CSurf_NumTracks(false);
@@ -281,7 +316,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 
-	// ToDo: Light up buttons for transport control et al (both ways, i.e. callbacks from Reaper GUI as well as when triggered from Keyboard)
+
 	
 protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
