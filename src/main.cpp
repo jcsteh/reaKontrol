@@ -145,6 +145,7 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
+	this->_peakMixerUpdate(); // ToDo: Maybe update only every 2nd call to save CPU?
 	if (!this->_midiIn) {
 		return;
 	}
