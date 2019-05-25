@@ -45,7 +45,7 @@ const unsigned char CMD_NAV_SCENES = 0x33;
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
 const unsigned char CMD_MOVE_LOOP = 0x35;
 const unsigned char CMD_TRACK_AVAIL = 0x40;
-const unsigned char CMD_SEL_TRACK_PARAMS_CHANGED = 0x41;
+const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
 const unsigned char CMD_TRACK_MUTED = 0x43;
 const unsigned char CMD_TRACK_SOLOED = 0x44;
@@ -70,8 +70,8 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_CHANGE_VOLUME = 0x64;
-const unsigned char CMD_CHANGE_PAN = 0x65;
+const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
+const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
@@ -81,11 +81,6 @@ const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track 
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
-// Other potential uses:
-// - save CPU and MIDI bus resources by avoiding unnecessary updates or state information calls
-// - filtering (e.g. lowpass smoothing) of values
-// static int g_volBank_last[BANK_NUM_TRACKS] = { 0xff };
-// static int g_panBank_last[BANK_NUM_TRACKS] = { 0xff };
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -215,8 +210,7 @@ class NiMidiSurface: public BaseSurface {
 	// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		if (selected) {
-			int id = CSurf_TrackToID(track, false);
-			g_trackInFocus = id;
+			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
@@ -232,9 +226,11 @@ class NiMidiSurface: public BaseSurface {
 			this->_allMixerUpdate(); 
 			// ====================================================================
 #endif			
-			// Let Keyboard know about changed track selection 
+			// Let Keyboard know about changed track selection
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
-			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
+			// Set KK Instance Focus
+			g_trackInFocus = id;
+			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0,
 				getKkInstanceName(track));
 		}
 	}
@@ -360,6 +356,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:			
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				break;
+			case CMD_CHANGE_SEL_TRACK_VOLUME:
+				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
+				break;
+			case CMD_CHANGE_SEL_TRACK_PAN:
+				this->_onSelTrackPanChange(convertSignedMidiValue(value));
 				break;
 			default:
 #ifdef BASIC_DIAGNOSTICS
@@ -538,6 +540,26 @@ class NiMidiSurface: public BaseSurface {
 		// scaling by dividing by 127*8 (0.00098425)
 	}
 
+	void _onSelTrackVolumeChange(signed char value) {
+		double dvalue = static_cast<double>(value);
+		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+		if (!track) {
+			return;
+		}
+		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, dvalue * 0.007874, true), nullptr);
+		// ToDo: Consider different scaling than with KnobVolumeChange
+		// ToDo: non linear behaviour especially in the lower volumes would be preferable. 
+	}
+
+	void _onSelTrackPanChange(signed char value) {
+		double dvalue = static_cast<double>(value);
+		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+		if (!track) {
+			return;
+		}
+		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, dvalue * 0.00098425, true), nullptr);
+	}
+	
 	void _sendCc(unsigned char command, unsigned char value) {
 		if (this->_midiOut) {
 			this->_midiOut->Send(MIDI_CC, command, value, -1);
