@@ -96,71 +96,6 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
-// Convert dB value to decimal ASCII string
-char* dbToAsciiStringDB(double val) {
-	char ascii[10] = { '0','1','2','3','4','5','6','7','8','9' };
-	static char s[9] = { ' ',' ', ' ', ' ' , '.' , ' ' , 'd' , 'B' , '\0' };
-	int db_10 = (int)(val * 10.0); // one decimal point accuracy. No rounding.
-		
-	if (db_10 < 0) { 
-		s[0] = '-';
-		db_10 = -(db_10);
-	}
-	else { s[0] = ' '; }
-	
-	int c1000 = db_10 / 1000; int m1000 = c1000 * 1000;
-	int c100 = (db_10 - m1000) / 100; int m100 = c100 * 100;
-	int c10 = (db_10 - m1000 - m100) / 10; int m10 = c10 * 10;
-	int c1 = db_10 - m1000 - m100 - m10;
-	
-	if (c1000) {
-		s[1] = ascii[c1000];
-		s[2] = ascii[c100];
-	}
-	else {
-		s[1] = ' ';
-		if (c100) {
-			s[2] = ascii[c100];
-		}
-		else {
-			s[2] = ' ';
-		}
-	}
-	s[3] = ascii[c10];
-	s[5] = ascii[c1];
-	return s;
-}
-
-//-----------------------------------------------------------------------------------------------------------------------
-// The following conversion functions (C) 2006-2008 Cockos Incorporated
-// ToDo: Eliminate those that will eventually not be used (e.g. volToChar), also from header file
-static double charToVol(unsigned char val)
-{
-	double pos = ((double)val*1000.0) / 127.0;
-	pos = SLIDER2DB(pos);
-	return DB2VAL(pos);
-
-}
-
-static unsigned char volToChar(double vol)
-{
-	double d = (DB2SLIDER(VAL2DB(vol))*127.0 / 1000.0);
-	if (d < 0.0)d = 0.0;
-	else if (d > 127.0)d = 127.0;
-
-	return (unsigned char)(d + 0.5);
-}
-
-static double charToPan(unsigned char val)
-{
-	double pos = ((double)val*1000.0 + 0.5) / 127.0;
-
-	pos = (pos - 500.0) / 500.0;
-	if (fabs(pos) < 0.08) pos = 0.0;
-
-	return pos;
-}
-
 static unsigned char panToChar(double pan)
 {
 	pan = (pan + 1.0)*63.5;
@@ -170,8 +105,6 @@ static unsigned char panToChar(double pan)
 
 	return (unsigned char)(pan + 0.5);
 }
-// End of conversion functions (C) 2006-2008 Cockos Incorporated
-//-----------------------------------------------------------------------------------------------------------------------
 
 // Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
 // Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
@@ -310,15 +243,25 @@ class NiMidiSurface: public BaseSurface {
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
 			int numInBank = id % BANK_NUM_TRACKS;
-			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, dbToAsciiStringDB(VAL2DB(volume)));
+			char volText[64] = { 0 };
+			mkvolstr(volText, volume);
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, volText);
 			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume * 1.05925));
 		}
 	}
 
+	virtual void SetSurfacePan(MediaTrack* track, double pan) override {
+		int id = CSurf_TrackToID(track, false);
+		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+			int numInBank = id % BANK_NUM_TRACKS;
+			char panText[64];
+			mkpanstr(panText, pan);
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 uses internal text
+			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
+		}
+	}
 
-
-	
-protected:
+	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
@@ -505,20 +448,21 @@ protected:
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
 			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
-			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, dbToAsciiStringDB(VAL2DB(volume)));
-			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume * 1.05925));
-			//-------------------------------------------
-			// ToDo: Update Pan text and Pan marker
-			//-------------------------------------------
-
+			char volText[64];
+			mkvolstr(volText, volume);
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, volText);
+			this->_sendCc((CMD_KNOB_VOLUME0 + numInBank), volToChar_KkMk2(volume * 1.05925));			
+			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
+			char panText[64];	
+			mkpanstr(panText, pan);
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 uses internal text
+			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
 			}
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
-			// todo: level meters, volume, pan
-		}
-		// todo: navigate tracks, navigate banks. NOTE: probably not here
+		}	
 	}
 
 	void ClearSelected() {
