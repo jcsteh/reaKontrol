@@ -44,8 +44,9 @@
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_GetPlayState
 #define REAPERAPI_WANT_Track_GetPeakInfo
-#define REAPERAPI_WANT_DB2SLIDER
-#define REAPERAPI_WANT_SLIDER2DB
+#define REAPERAPI_WANT_mkvolstr
+#define REAPERAPI_WANT_mkpanstr
+
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 #include <reaper/WDL/db2val.h>
