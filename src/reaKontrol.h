@@ -10,6 +10,7 @@
 
 #include <windows.h>
 
+// ToDo: Cleanup REAPERAPI WANT list
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
 #define REAPERAPI_WANT_GetNumMIDIInputs
@@ -40,8 +41,13 @@
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
 #define REAPERAPI_WANT_CSurf_SetPlayState
 #define REAPERAPI_WANT_CSurf_SetRepeatState
+#define REAPERAPI_WANT_CSurf_SetSurfaceMute
+#define REAPERAPI_WANT_CSurf_SetSurfaceSolo
+#define REAPERAPI_WANT_CSurf_SetSurfaceRecArm
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
+#define REAPERAPI_WANT_CSurf_OnMuteChange
+#define REAPERAPI_WANT_CSurf_OnSoloChange
 #define REAPERAPI_WANT_GetPlayState
 #define REAPERAPI_WANT_Track_GetPeakInfo
 #define REAPERAPI_WANT_mkvolstr

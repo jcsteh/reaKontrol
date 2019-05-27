@@ -28,22 +28,22 @@ const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
-const unsigned char CMD_COUNT = 0x13;
+const unsigned char CMD_COUNT = 0x13; // ToDo: ?
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15;
+const unsigned char CMD_CLEAR = 0x15; // ToDo: ?
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
-const unsigned char CMD_QUANTIZE = 0x22;
-const unsigned char CMD_AUTO = 0x23;
+const unsigned char CMD_QUANTIZE = 0x22; // ToDo: ?
+const unsigned char CMD_AUTO = 0x23; // ToDo: Toggle between automation modes
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
-const unsigned char CMD_NAV_SCENES = 0x33;
+const unsigned char CMD_NAV_SCENES = 0x33; // not used
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35;
+const unsigned char CMD_MOVE_LOOP = 0x35; // not used
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -54,6 +54,7 @@ const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
 const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
+const unsigned char CMD_TRACK_MUTED_BY_SOLO = 0x4A; // ToDo: Implement this in _allMixerUpdate AND _SetSurfaceSolo (or less efficiently _peakMixerUpdate)
 const unsigned char CMD_KNOB_VOLUME0 = 0x50;
 const unsigned char CMD_KNOB_VOLUME1 = 0x51;
 const unsigned char CMD_KNOB_VOLUME2 = 0x52;
@@ -70,10 +71,16 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
+const unsigned char CMD_PLAY_CLIP = 0x60; // not used
+const unsigned char CMD_STOP_CLIP = 0x61; // not used
+const unsigned char CMD_PLAY_SCENE = 0x62; // not used
+const unsigned char CMD_RECORD_SESSION = 0x63; // not used
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
-const unsigned char CMD_TOGGLE_MUTE = 0x66;
-const unsigned char CMD_TOGGLE_SOLO = 0x67;
+const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
+const unsigned char CMD_TOGGLE_SEL_TRACK_SOLO = 0x67;
+const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // ToDo: ?
+const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
 
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
@@ -82,9 +89,9 @@ const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track 
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
 
-// Convert a signed 7 bit MIDI value to a signed char.
-// That is, convertSignedMidiValue(127) will return -1.
 signed char convertSignedMidiValue(unsigned char value) {
+	// Convert a signed 7 bit MIDI value to a signed char.
+	// That is, convertSignedMidiValue(127) will return -1.
 	if (value <= 63) {
 		return value;
 	}
@@ -101,11 +108,11 @@ static unsigned char panToChar(double pan)
 	return (unsigned char)(pan + 0.5);
 }
 
-// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
-// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
-// It is assumed that other NI Keyboards use the same scaling for the meters.
-// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
 static unsigned char volToChar_KkMk2(double volume) {
+	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
+	// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
+	// It is assumed that other NI Keyboards use the same scaling for the meters.
+	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
 	constexpr double minus48dB = 0.00398107170553497250;
 	constexpr double minus96dB = 1.5848931924611134E-05;
 	constexpr double m = (16.0 - 2.0) / (minus48dB - minus96dB);
@@ -124,10 +131,14 @@ static unsigned char volToChar_KkMk2(double volume) {
 	else {
 		result = 0.5; // will be rounded to 1
 	}
-	if (result > 126.5) result = 126.5;
+	if (result > 126.5) {
+		result = 126.5;
+	}
 	return (unsigned char)(result + 0.5); // rounding and make sure that minimum value returned is 1
 }
 
+// ToDo: Some Reaper callbacks (Set....) are called unecessarily (?) often in Reaper, see various forum reports & comments from schwa
+// => Consider state checking statements at beginning of every callback to return immediately if call is not necessary -> save CPU
 
 class NiMidiSurface: public BaseSurface {
 	public:
@@ -147,9 +158,9 @@ class NiMidiSurface: public BaseSurface {
 	virtual const char* GetDescString() override {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
-
-	// Update transport button lights
+		
 	virtual void SetPlayState(bool play, bool pause, bool rec) override {
+		// Update transport button lights
 		if (rec) {
 			this->_sendCc(CMD_REC, 1);
 		}
@@ -169,9 +180,9 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendCc(CMD_STOP, 1);
 		}
 	}
-
-	// Update repeat (aka loop) button light
+		
 	virtual void SetRepeatState(bool rep) override {
+		// Update repeat (aka loop) button light
 		if (rep) {
 			this->_sendCc(CMD_LOOP, 1);
 		}
@@ -181,10 +192,13 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	// ToDo: add more button lights: METRO, AUTO, tbd: undo/redo, clear, quantize, tempo
-	// ToDo: mute and solo buttons for the selected track should be handled in their dedicated calls
+	// ToDo: bank buttons
 
-	// If tracklist changes update Mixer View and ensure sanity of track and bank focus
+	// ToDo: If track name changes the mixer view shall be updated "immediately". This is currently not captured via SetTrackList change!
+	// We may have to poll for such a change - best candidate would be SetSurfaceSelected.....
+		
 	virtual void SetTrackListChange() override {
+		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
 		if (g_trackInFocus > numTracks) {
@@ -195,8 +209,8 @@ class NiMidiSurface: public BaseSurface {
 		}
 		// Protect against loosing bank focus. Set focus on last bank in this case.
 		if (this->_bankStart > numTracks) {
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			this->_bankStart = numTracks - lastInBank;
+			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
+			this->_bankStart = numTracks - lastInLastBank;
 		}
 		// If no track is selected at all (e.g. if previously selected track got removed), then this will now also show up in the
 		// Mixer View. However, KK instance focus may still be present! This can be a little bit confusing for the user as typically
@@ -204,11 +218,12 @@ class NiMidiSurface: public BaseSurface {
 		// track navigation/selection happens (from keyboard or from within Reaper).
 		this->_allMixerUpdate();
 	}
-
-	// Using SetSurfaceSelected() rather than OnTrackSelection():
-	// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
-	// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
+		
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
+		// Using SetSurfaceSelected() rather than OnTrackSelection():
+		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
+		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
+		// See also notes in SetSurfaceRecArm
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -217,15 +232,6 @@ class NiMidiSurface: public BaseSurface {
 			if (this->_bankStart != oldBankStart) {
 				this->_allMixerUpdate();
 			}
-#ifdef DEBUG_DIAGNOSTICS
-			// ====================================================================
-			// THIS TEMPORARY BLOCK IS JUST FOR TESTING
-			// We abuse the SetSurfaceSelected callback to update the entire Mixer
-			// on every track selection change.
-			// ToDo: Remove this block as soon as the proper callbacks per parameter are in place
-			this->_allMixerUpdate(); 
-			// ====================================================================
-#endif			
 			// Let Keyboard know about changed track selection
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 			// Set KK Instance Focus
@@ -254,6 +260,47 @@ class NiMidiSurface: public BaseSurface {
 			mkpanstr(panText, pan);
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
+		}
+	}
+		
+	virtual void SetSurfaceMute(MediaTrack* track, bool mute) override {
+		int id = CSurf_TrackToID(track, false);
+		if (id == g_trackInFocus) {
+			this->_sendCc(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0); // ToDo: does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
+		}
+		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
+		}
+	}
+		
+	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
+		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
+		int id = CSurf_TrackToID(track, false);
+		// Reaper API has a "special" behavior: https://forum.cockos.com/showthread.php?p=2139125#post2139125
+		// Ignore solo on master
+		// ToDo: Consider implementing MUTED_BY_SOLO here together with a complete solo status update for the bank!
+		if (id == 0) {
+			return;
+		}
+		if (id == g_trackInFocus) {
+			this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0); // ToDo: does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
+		}
+		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_sendSysex(CMD_TRACK_SOLOED, solo ? 1 : 0, numInBank);
+		}
+	}
+
+	virtual void SetSurfaceRecArm(MediaTrack* track, bool armed) override {
+		// ToDo: ISSUE: it seems (confirmed by forum reports) that record arm in Reaper leads to a cascade of callbacks
+		// In our case it seems that also the SetSurfaceSelected gets triggered although no track selection change happened
+		// This may even depend on settings in preferences? 
+		// => Consider filtering this somehow with state variables in SetSurfaceSelected or just live with it...
+		int id = CSurf_TrackToID(track, false);
+		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_sendSysex(CMD_TRACK_ARMED, armed ? 1 : 0, numInBank);
 		}
 	}
 
@@ -337,6 +384,14 @@ class NiMidiSurface: public BaseSurface {
 				// Select a track from current bank in Mixer Mode with top row buttons
 				this->_onTrackSelect(value);
 				break;
+			case CMD_TRACK_MUTED:
+				// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackMute(value);
+				break;
+			case CMD_TRACK_SOLOED:
+				// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSolo(value);
+				break;
 			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -363,6 +418,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_CHANGE_SEL_TRACK_PAN:
 				this->_onSelTrackPanChange(convertSignedMidiValue(value));
 				break;
+			case CMD_TOGGLE_SEL_TRACK_MUTE:
+				this->_onSelTrackMute();
+				break;
+			case CMD_TOGGLE_SEL_TRACK_SOLO:
+				this->_onSelTrackSolo();
+				break;
 			default:
 #ifdef BASIC_DIAGNOSTICS
 				ostringstream s;
@@ -386,17 +447,17 @@ class NiMidiSurface: public BaseSurface {
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
 		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
-		char peakBank[(BANK_NUM_TRACKS * 2) + 1] = { 0 };
+		char peakBank[(BANK_NUM_TRACKS * 2) + 1];
 		peakBank[(BANK_NUM_TRACKS * 2)] = '\0'; // "end of string" marker
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		int numTracks = CSurf_NumTracks(false); 		
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			peakBank[(lastInBank +1) * 2] = '\0'; // end of string (no tracks available further to the right)
+			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
+			peakBank[(lastInLastBank + 1) * 2] = '\0'; // end of string (no tracks available further to the right)
 		}
 		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
@@ -404,10 +465,12 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			}
 			j = 2 * numInBank;
-			// Muted tracks still report peak levels => ignore these
-			if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+			// Muted tracks still report peak levels => ignore these if the track is not soloed
+			// ToDo: Consider to keep track of mute and solo states (of tracks in bank) locally in plugin - saves CPU
+			if ((*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) &&
+				(*(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr) == 0)) {
 				peakBank[j] = 1;
-				peakBank[j+1] = 1;
+				peakBank[j + 1] = 1;
 			}
 			else {
 				peakValue = Track_GetPeakInfo(track, 0); // left channel
@@ -426,12 +489,12 @@ class NiMidiSurface: public BaseSurface {
 	void _allMixerUpdate() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		int numTracks = CSurf_NumTracks(false); 
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			for (int i = 7; i > lastInBank; --i) {
+			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
+			for (int i = 7; i > lastInLastBank; --i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
 			}
 		}
@@ -440,6 +503,7 @@ class NiMidiSurface: public BaseSurface {
 			if (!track) {
 				break;
 			}
+			// ToDo: Consider indicating master track
 			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
@@ -467,7 +531,7 @@ class NiMidiSurface: public BaseSurface {
 		}	
 	}
 
-	void ClearSelected() {
+	void _clearAllSelectedTracks() {
 		// Clear all selected tracks. Copyright (c) 2010 and later Tim Payne (SWS)
 		int iSel = 0;
 		for (int i = 0; i <= GetNumTracks(); i++) // really ALL tracks, hence no use of CSurf_NumTracks
@@ -484,7 +548,7 @@ class NiMidiSurface: public BaseSurface {
 					  // If we rather wanted to "Toggle" than just "Select" we would use:
 					  // int iSel = 0;
 					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
-		ClearSelected(); 
+		_clearAllSelectedTracks(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
@@ -502,19 +566,39 @@ class NiMidiSurface: public BaseSurface {
 		int id = g_trackInFocus + value;
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
-		ClearSelected();
+		_clearAllSelectedTracks();
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
 	void _onBankSelect(signed char value) {
 		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
 		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		int numTracks = CSurf_NumTracks(false); 
 		if ((newBankStart < 0) || (newBankStart > numTracks)) {
 			return;
 		}
 		this->_bankStart = newBankStart;
 		this->_allMixerUpdate();
+	}
+
+	void _onTrackMute(unsigned char numInBank) {
+		int id = this->_bankStart + numInBank;
+		if ((id == 0) || (id > CSurf_NumTracks(false))) {
+			return;
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
+		CSurf_OnMuteChange(track, muted ? 0 : 1);
+	}
+
+	void _onTrackSolo(unsigned char numInBank) {		
+		int id = this->_bankStart + numInBank;
+		if ((id == 0) || (id > CSurf_NumTracks(false))) {
+			return;
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+		CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
@@ -560,6 +644,30 @@ class NiMidiSurface: public BaseSurface {
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, dvalue * 0.00098425, true), nullptr);
 	}
 	
+	void _onSelTrackMute() {
+		if (g_trackInFocus > 0) {
+			MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+			if (!track) {
+				return;
+			}
+			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
+			CSurf_OnMuteChange(track, muted ? 0 : 1);
+		}		
+	}
+	
+	void _onSelTrackSolo() {
+		if (g_trackInFocus > 0) {
+			MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+			if (!track) {
+				return;
+			}
+			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
+		}		
+	}
+
+	// ToDo: toggle automation mode
+
 	void _sendCc(unsigned char command, unsigned char value) {
 		if (this->_midiOut) {
 			this->_midiOut->Send(MIDI_CC, command, value, -1);
