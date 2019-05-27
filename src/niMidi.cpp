@@ -124,11 +124,13 @@ class NiMidiSurface: public BaseSurface {
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
+
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
+				// Toggles between play and pause
 				CSurf_OnPlay();
 				break;
 			case CMD_RESTART:
