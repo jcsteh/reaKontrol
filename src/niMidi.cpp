@@ -135,7 +135,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
-				CSurf_OnPlay();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					CSurf_OnPlay();
+				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
