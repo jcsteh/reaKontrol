@@ -168,6 +168,10 @@ class NiMidiSurface: public BaseSurface {
 					40286, // Track: Go to previous track
 				0);
 				break;
+			case CMD_NAV_BANKS:
+				// Value is -1 or 1.
+				this->_onBankSelect(convertSignedMidiValue(value));
+				break; 
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -243,6 +247,17 @@ class NiMidiSurface: public BaseSurface {
 			// todo: level meters, volume, pan
 		}
 		// todo: navigate tracks, navigate banks
+	}
+
+	void _onBankSelect(signed char value) {
+		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
+		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
+		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		if ((newBankStart < 0) || (newBankStart > numTracks)) {
+			return;
+		}
+		this->_bankStart = newBankStart;
+		this->_onBankChange();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
