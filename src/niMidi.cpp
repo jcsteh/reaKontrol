@@ -54,7 +54,7 @@ const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
 const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
-const unsigned char CMD_TRACK_MUTED_BY_SOLO = 0x4A; // ToDo: Implement this in _allMixerUpdate AND _SetSurfaceSolo (or less efficiently _peakMixerUpdate)
+const unsigned char CMD_TRACK_MUTED_BY_SOLO = 0x4A; // ToDo: Check back with newer KK firmware if this gets implemented correctly
 const unsigned char CMD_KNOB_VOLUME0 = 0x50;
 const unsigned char CMD_KNOB_VOLUME1 = 0x51;
 const unsigned char CMD_KNOB_VOLUME2 = 0x52;
@@ -71,7 +71,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // not used
+const unsigned char CMD_PLAY_CLIP = 0x60; // ToDo: Use this to switch Mixer view into bank with focused = selected track!!
 const unsigned char CMD_STOP_CLIP = 0x61; // not used
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used
@@ -88,6 +88,8 @@ const unsigned char TRTYPE_MASTER = 6;
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
+static bool g_anySolo = false;
+static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 
 signed char convertSignedMidiValue(unsigned char value) {
 	// Convert a signed 7 bit MIDI value to a signed char.
@@ -278,10 +280,9 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
-		// Reaper API has a "special" behavior: https://forum.cockos.com/showthread.php?p=2139125#post2139125
-		// Ignore solo on master
-		// ToDo: Consider implementing MUTED_BY_SOLO here together with a complete solo status update for the bank!
+		// Ignore solo an master, this is only used as an "any track is soloed" indicator
 		if (id == 0) {
+			g_anySolo = solo;
 			return;
 		}
 		if (id == g_trackInFocus) {
@@ -289,7 +290,16 @@ class NiMidiSurface: public BaseSurface {
 		}
 		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
 			int numInBank = id % BANK_NUM_TRACKS;
-			this->_sendSysex(CMD_TRACK_SOLOED, solo ? 1 : 0, numInBank);
+			if (solo) {
+				g_soloStateBank[numInBank] = 1;
+				this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
+				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, numInBank);
+			}
+			else {
+				g_soloStateBank[numInBank] = 0;
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
+				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+			}
 		}
 	}
 
@@ -320,7 +330,8 @@ class NiMidiSurface: public BaseSurface {
 			<< (int)event->midi_message[1] << " "
 			<< (int)event->midi_message[2] << " Focus Track "
 			<< g_trackInFocus << " Bank Start "
-			<< this->_bankStart << endl;
+			<< this->_bankStart << " anySolo "
+			<< g_anySolo << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
 
@@ -466,18 +477,35 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			}
 			j = 2 * numInBank;
-			// Muted tracks still report peak levels => ignore these if the track is not soloed
-			// ToDo: Consider to keep track of mute and solo states (of tracks in bank) locally in plugin - saves CPU
-			if ((*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) &&
-				(*(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr) == 0)) {
-				peakBank[j] = 1;
-				peakBank[j + 1] = 1;
+
+			// ToDo: Check with KK firmware improvements if CMD_TRACK_MUTED_BY_SOLO will eventually be implemented correctly.
+		    // In that case the meter bars should be grey and we do not have to supress them entirely as implemented now.
+
+			// If any track is soloed then only soloed tracks and the master show peaks (irrespective of their mute state)
+			if (g_anySolo) {
+				if ((g_soloStateBank[numInBank] == 0) && (numInBank != 0)) {
+					peakBank[j] = 1;
+					peakBank[j + 1] = 1;
+				}
+				else {
+					peakValue = Track_GetPeakInfo(track, 0); // left channel
+					peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					peakValue = Track_GetPeakInfo(track, 1); // right channel
+					peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+				}
 			}
+			// If no tracks are soloed then muted tracks shall show no peaks
 			else {
-				peakValue = Track_GetPeakInfo(track, 0); // left channel
-				peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
-				peakValue = Track_GetPeakInfo(track, 1); // right channel
-				peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
+				if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+					peakBank[j] = 1;
+					peakBank[j + 1] = 1;
+				}
+				else {
+					peakValue = Track_GetPeakInfo(track, 0); // left channel
+					peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					peakValue = Track_GetPeakInfo(track, 1); // right channel
+					peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
+				}
 			}
 		}	
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
@@ -512,6 +540,7 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}
 		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			// ToDo: While not really necessary consider removing some info polls for master track (i.e. record arm, solo)
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -525,7 +554,16 @@ class NiMidiSurface: public BaseSurface {
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-			this->_sendSysex(CMD_TRACK_SOLOED, (soloState==0) ? 0 : 1, numInBank);
+			if (soloState == 0) {
+				g_soloStateBank[numInBank] = 0;
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
+				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+			}
+			else {
+				g_soloStateBank[numInBank] = 1;
+				this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
+				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, numInBank);
+			}
 			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
