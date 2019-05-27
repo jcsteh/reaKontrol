@@ -83,7 +83,7 @@ const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // ToDo: ?
 const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
 
 const unsigned char TRTYPE_UNSPEC = 1;
-const unsigned char TRTYPE_MASTER = 6; // ToDo: consider declaring master track in Mixer View
+const unsigned char TRTYPE_MASTER = 6;
 
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
@@ -192,10 +192,6 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	// ToDo: add more button lights: METRO, AUTO, tbd: undo/redo, clear, quantize, tempo
-	// ToDo: bank buttons
-
-	// ToDo: If track name changes the mixer view shall be updated "immediately". This is currently not captured via SetTrackList change!
-	// We may have to poll for such a change - best candidate would be SetSurfaceSelected.....
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
@@ -230,7 +226,12 @@ class NiMidiSurface: public BaseSurface {
 			int oldBankStart = this->_bankStart;
 			this->_bankStart = id - numInBank;
 			if (this->_bankStart != oldBankStart) {
+				// Update everything
 				this->_allMixerUpdate();
+			}
+			else {
+				// Update track names
+				this->_namesMixerUpdate();
 			}
 			// Let Keyboard know about changed track selection
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
@@ -490,21 +491,37 @@ class NiMidiSurface: public BaseSurface {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
+		// Set bank select button lights
+		int bankLights = 3; // left and right on
+		if (numTracks < BANK_NUM_TRACKS) {
+			bankLights = 0; // left and right off
+		}
+		else if (this->_bankStart == 0) {
+			bankLights = 2; // left off, right on
+		}
+		else if (bankEnd >= numTracks) {
+			bankLights = 1; // left on, right off
+		}
+		this->_sendCc(CMD_NAV_BANKS, bankLights);
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
 			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
 			for (int i = 7; i > lastInLastBank; --i) {
-				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);				
 			}
 		}
 		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
+			}			
+			if (id == 0) {
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MASTER, numInBank);
 			}
-			// ToDo: Consider indicating master track
-			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
+			else {
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
+			}			
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
@@ -529,6 +546,26 @@ class NiMidiSurface: public BaseSurface {
 			}
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 		}	
+	}
+
+	void _namesMixerUpdate() {
+		int numInBank = 0;
+		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
+		int numTracks = CSurf_NumTracks(false);
+		if (bankEnd > numTracks) {
+			bankEnd = numTracks;
+		}
+		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+			MediaTrack* track = CSurf_TrackFromID(id, false);
+			if (!track) {
+				break;
+			}
+			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+			if (!name) {
+				name = "";
+			}
+			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+		}
 	}
 
 	void _clearAllSelectedTracks() {
