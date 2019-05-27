@@ -171,7 +171,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
 				this->_onBankSelect(convertSignedMidiValue(value));
-				break; 
+				break;
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
@@ -181,6 +181,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_MOVE_TRANSPORT:
 				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
 				break;
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -247,6 +251,26 @@ class NiMidiSurface: public BaseSurface {
 			// todo: level meters, volume, pan
 		}
 		// todo: navigate tracks, navigate banks
+	}
+
+	void ClearSelected() {
+		// Clear all selected tracks.
+		int iSel = 0;
+		// really ALL tracks, hence no use of CSurf_NumTracks
+		for (int i = 0; i <= GetNumTracks(); i++) {
+			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
+		}
+	}
+
+	void _onTrackSelect(unsigned char numInBank) {
+		int id = this->_bankStart + numInBank;
+		if (id > CSurf_NumTracks(false)) {
+			return;
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		ClearSelected();
+		int iSel = 1; // "Select"
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
 
 	void _onBankSelect(signed char value) {
