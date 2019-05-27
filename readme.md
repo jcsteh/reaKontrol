@@ -1,9 +1,9 @@
-# ReaKontrol
+# ReaKontrol-Fork
 - Fork of the excellent ReaKontrol repository published by James Teh: https://github.com/jcsteh/reaKontrol
-- Author: brumbear@pacificpeaks & other contributors
-- Copyright: 2019 and later Pacific Peaks Studio, see individual copyrights in source code
+- Fork Author: brumbear@pacificpeaks
+- Fork Copyright: 2019 Pacific Peaks Studio, see individual copyrights in source code
 - License: GNU General Public License version 2.0.
-- License Notes: As the original work is published under GPLv2 the updated programs are also licensed under GPLv2. May be updated to GPLv3 if copyright holder of original work agrees to update too.
+- License Notes: As the original work is published under GPLv2 the modified programs are also licensed under GPLv2. May be updated to GPLv3 if copyright holder of original work agrees to update too.
 
 ## Feature Integration & Releases
 This fork is mainly a development branch aiming to continuously add functionality to ReaKontrol. 
