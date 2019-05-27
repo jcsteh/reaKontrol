@@ -2,8 +2,9 @@
  * ReaKontrol
  * Support for MIDI protocol used by Komplete Kontrol S-series Mk2, A-series
  * and M-Series
- * Author: James Teh <jamie@jantrid.net>
+ * Authors: James Teh <jamie@jantrid.net>, Leonard de Ruijter, brumbear@pacificpeaks
  * Copyright 2018-2019 James Teh
+ * Copyright 2019 Pacific Peaks Studio
  * License: GNU General Public License version 2.0
  */
 
@@ -71,7 +72,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // ToDo: Use this to switch Mixer view into bank with focused = selected track!!
+const unsigned char CMD_PLAY_CLIP = 0x60; // Use here to switch Mixer view to the bank containing the currently focused (= selected) track
 const unsigned char CMD_STOP_CLIP = 0x61; // not used
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used
@@ -423,6 +424,11 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:			
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				break;
+			case CMD_PLAY_CLIP:
+				// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
+				this->_bankStart = (int)(g_trackInFocus / BANK_NUM_TRACKS) * BANK_NUM_TRACKS;
+				this->_allMixerUpdate();
 				break;
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
