@@ -194,7 +194,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
-	// ToDo: add more button lights: METRO, AUTO, tbd: undo/redo, clear, quantize, tempo
+	// ToDo: add more button lights: AUTO, tbd: undo/redo, clear, quantize, tempo
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
@@ -515,6 +515,25 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}	
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
+	}
+
+	// Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
+	void* GetConfigVar(const char* cVar) {
+		int sztmp;
+		void* p = NULL;
+		if (int iOffset = projectconfig_var_getoffs(cVar, &sztmp))
+		{
+			p = projectconfig_var_addr(EnumProjects(-1, NULL, 0), iOffset);
+		}
+		else
+		{
+			p = get_config_var(cVar, &sztmp);
+		}
+		return p;
+	}
+
+	void _metronomeUpdate() override {
+		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
 
 	private:
