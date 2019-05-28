@@ -532,6 +532,8 @@ class NiMidiSurface: public BaseSurface {
 		return p;
 	}
 
+	// ToDo: try to replace this whole polling scheme with CSURF_EXT_SETMETRONOME 0x00010002 // parm1=0 <-> disable, !0 <-> enable
+	// Ideally this should work as a callback, i.e. interrupt driven rather than polling
 	void _metronomeUpdate() override {
 		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}

@@ -145,6 +145,8 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
+	// ToDo: Rather than putting this in BaseSurface consider to just override Run() in NiMidiSurface and call the superclass : BaseSurface::Run()
+	// ToDo: Metronome: try to substitute polling with callback, see details @ _metronomeUpdate in NiMiDi.cpp
 	const int METRO_UPDATE = 30;
 	static int simpleTimer = 0;
 	this->_peakMixerUpdate(); // ToDo: Maybe update only every 2nd call to save CPU?
@@ -155,6 +157,7 @@ void BaseSurface::Run() {
 		simpleTimer = 0;
 		this->_metronomeUpdate();
 	}	
+	// --------------------------------------------------------------------------------
 	if (!this->_midiIn) {
 		return;
 	}
