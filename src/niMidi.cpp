@@ -72,7 +72,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // Use here to switch Mixer view to the bank containing the currently focused (= selected) track
+const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
 const unsigned char CMD_STOP_CLIP = 0x61; // not used
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used
@@ -203,7 +203,7 @@ class NiMidiSurface: public BaseSurface {
 		if (g_trackInFocus > numTracks) {
 			g_trackInFocus = numTracks; 
 			// Unfortunately we cannot afford to explicitly select the last track automatically because this could screw up
-			// running actions or macros. The plugin may not manipulate track selection without the user deliberately triggering
+			// running actions or macros. The plugin must not manipulate track selection without the user deliberately triggering
 			// track selection/navigation on the keyboard (or from within Reaper).
 		}
 		// Protect against loosing bank focus. Set focus on last bank in this case.
@@ -281,7 +281,7 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
-		// Ignore solo an master, this is only used as an "any track is soloed" indicator
+		// Ignore solo on master, id = 0 is only used as an "any track is soloed" indicator
 		if (id == 0) {
 			g_anySolo = solo;
 			return;
