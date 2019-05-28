@@ -8,8 +8,8 @@
  * License: GNU General Public License version 2.0
  */
 
-#define DEBUG_DIAGNOSTICS
-#define BASIC_DIAGNOSTICS
+// #define DEBUG_DIAGNOSTICS
+// #define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
