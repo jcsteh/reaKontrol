@@ -52,6 +52,11 @@
 #define REAPERAPI_WANT_Track_GetPeakInfo
 #define REAPERAPI_WANT_mkvolstr
 #define REAPERAPI_WANT_mkpanstr
+#define REAPERAPI_WANT_get_config_var
+#define REAPERAPI_WANT_projectconfig_var_getoffs
+#define REAPERAPI_WANT_projectconfig_var_addr
+#define REAPERAPI_WANT_EnumProjects
+
 
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
@@ -73,6 +78,7 @@ class BaseSurface: public IReaperControlSurface {
 	midi_Output* _midiOut = nullptr;
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
 	virtual void _peakMixerUpdate() = 0;
+	virtual void _metronomeUpdate() = 0;
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);

@@ -145,7 +145,16 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
+	const int METRO_UPDATE = 30;
+	static int simpleTimer = 0;
 	this->_peakMixerUpdate(); // ToDo: Maybe update only every 2nd call to save CPU?
+	if (simpleTimer < METRO_UPDATE) {
+		++simpleTimer;
+	}
+	else {
+		simpleTimer = 0;
+		this->_metronomeUpdate();
+	}	
 	if (!this->_midiIn) {
 		return;
 	}
