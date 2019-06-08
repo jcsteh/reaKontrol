@@ -86,6 +86,8 @@ const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
 
+#define CSURF_EXT_SETMETRONOME 0x00010002
+
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = 0;
@@ -222,7 +224,9 @@ class NiMidiSurface: public BaseSurface {
 		// Using SetSurfaceSelected() rather than OnTrackSelection():
 		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
-		// See also notes in SetSurfaceRecArm
+		
+		// Note: SetSurfaceSelected is also called on project tab change
+		this->_metronomeUpdate(); //check if metronome status has changed when switching project tabs
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -241,7 +245,7 @@ class NiMidiSurface: public BaseSurface {
 			// Set KK Instance Focus
 			g_trackInFocus = id;
 			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0,
-				getKkInstanceName(track));
+				getKkInstanceName(track));			
 		}
 	}
 	
@@ -316,10 +320,19 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	virtual int Extended(int call, void *parm1, void *parm2, void *parm3) override {
+		if (call != CSURF_EXT_SETMETRONOME) {
+			return 0; // we are only interested in the metronome. Note: This works fine but does not update the status when changing project tabs
+		}
+		this->_sendCc(CMD_METRO, (parm1 == 0) ? 0 : 1);
+		return 1;
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
+			// ToDo: Analyze other incoming MIDI messages too, like Sysex, MCU etc
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
@@ -515,27 +528,6 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}	
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
-	}
-
-	// Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
-	void* GetConfigVar(const char* cVar) {
-		int sztmp;
-		void* p = NULL;
-		if (int iOffset = projectconfig_var_getoffs(cVar, &sztmp))
-		{
-			p = projectconfig_var_addr(EnumProjects(-1, NULL, 0), iOffset);
-		}
-		else
-		{
-			p = get_config_var(cVar, &sztmp);
-		}
-		return p;
-	}
-
-	// ToDo: try to replace this whole polling scheme with CSURF_EXT_SETMETRONOME 0x00010002 // parm1=0 <-> disable, !0 <-> enable
-	// Ideally this should work as a callback, i.e. interrupt driven rather than polling
-	void _metronomeUpdate() override {
-		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
 
 	private:
@@ -766,6 +758,25 @@ class NiMidiSurface: public BaseSurface {
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
 			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
 		}		
+	}
+
+	void* GetConfigVar(const char* cVar) { // Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
+		int sztmp;
+		void* p = NULL;
+		if (int iOffset = projectconfig_var_getoffs(cVar, &sztmp))
+		{
+			p = projectconfig_var_addr(EnumProjects(-1, NULL, 0), iOffset);
+		}
+		else
+		{
+			p = get_config_var(cVar, &sztmp);
+		}
+		return p;
+	}
+
+	void _metronomeUpdate() {
+		// Actively poll the metronome status on project tab changes
+		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
 
 	// ToDo: toggle automation mode
