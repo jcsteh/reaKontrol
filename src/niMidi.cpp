@@ -86,6 +86,9 @@ const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
 
+// Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
+const bool HIDE_MUTED_BY_SOLO = false;
+
 #define CSURF_EXT_SETMETRONOME 0x00010002
 
 // State Information
@@ -290,30 +293,7 @@ class NiMidiSurface: public BaseSurface {
 			// If g_anySolo state has changed update the tracks' muted by solo states within the current bank
 			if (g_anySolo != solo) {
 				g_anySolo = solo;
-				/*
-				int numInBank = 0;
-				if (g_anySolo) {
-					int startCount = this->_bankStart;
-					if (startCount == 0) {
-						startCount = 1;
-					}
-					for (int j = startCount; j <= _bankEnd; ++j, ++numInBank) {
-						this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_soloStateBank[numInBank] == 0 ? 1 : 0, numInBank);
-					}
-				}
-				else {
-					for (int j = this->_bankStart; j <= _bankEnd; ++j, ++numInBank) {
-						this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, numInBank);
-					}
-				}
-				*/
-				this->_allMixerUpdate(); // ToDo: For some reason this call is needed here. Investigate deeper as it seems wasteful
-#ifdef DEBUG_DIAGNOSTICS
-				ostringstream s;
-				s << "solo id zero call" << showbase << hex
-					<< id << endl;
-				ShowConsoleMsg(s.str().c_str());
-#endif
+				this->_allMixerUpdate(); // Everything needs to be updated, not good enough to just update muted_by_solo states
 			}
 			return;
 		}
@@ -522,24 +502,37 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			}
 			j = 2 * numInBank;
-
-			// If any track is soloed then only soloed tracks and the master show peaks (irrespective of their mute state)
-			// ToDo: Consider showing greyed out meter bars (muted by solo) instead of surpressing them entirely as implemented now.
-			if (g_anySolo) {
-				if ((g_soloStateBank[numInBank] == 0) && (((numInBank != 0)&&(this->_bankStart == 0)) || (this->_bankStart != 0))){
-					peakBank[j] = 1;
-					peakBank[j + 1] = 1;
+			if (HIDE_MUTED_BY_SOLO) {
+				// If any track is soloed then only soloed tracks and the master show peaks (irrespective of their mute state)
+				if (g_anySolo) {
+					if ((g_soloStateBank[numInBank] == 0) && (((numInBank != 0) && (this->_bankStart == 0)) || (this->_bankStart != 0))) {
+						peakBank[j] = 1;
+						peakBank[j + 1] = 1;
+					}
+					else {
+						peakValue = Track_GetPeakInfo(track, 0); // left channel
+						peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+						peakValue = Track_GetPeakInfo(track, 1); // right channel
+						peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					}
 				}
+				// If no tracks are soloed then muted tracks shall show no peaks
 				else {
-					peakValue = Track_GetPeakInfo(track, 0); // left channel
-					peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
-					peakValue = Track_GetPeakInfo(track, 1); // right channel
-					peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+						peakBank[j] = 1;
+						peakBank[j + 1] = 1;
+					}
+					else {
+						peakValue = Track_GetPeakInfo(track, 0); // left channel
+						peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+						peakValue = Track_GetPeakInfo(track, 1); // right channel
+						peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
+					}
 				}
 			}
-			// If no tracks are soloed then muted tracks shall show no peaks
 			else {
-				if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+				// Tracks muted by solo show peaks but they appear greyed out. Muted tracks that are NOT soloed shall show no peaks.
+				if ((g_soloStateBank[numInBank] == 0) && (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr))) {
 					peakBank[j] = 1;
 					peakBank[j + 1] = 1;
 				}
