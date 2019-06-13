@@ -14,6 +14,7 @@
 #include <string>
 #include <sstream>
 #include <cstring>
+#include <vector>
 #include "reaKontrol.h"
 
 using namespace std;
@@ -312,12 +313,6 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
 				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
 			}
-#ifdef DEBUG_DIAGNOSTICS
-			ostringstream s;
-			s << "solo id other " << showbase << hex
-				<< id << endl;
-			ShowConsoleMsg(s.str().c_str());
-#endif
 		}
 	}
 
@@ -607,8 +602,11 @@ class NiMidiSurface: public BaseSurface {
 				int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 				this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
 				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-				if (!name) {
-					name = "";
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
 				}
 				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			}			
@@ -624,7 +622,7 @@ class NiMidiSurface: public BaseSurface {
 			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
 			char panText[64];	
 			mkpanstr(panText, pan);
-			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 & 0.5.9 uses internal text
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 & 0.5.9 use internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}	
 	}
@@ -646,8 +644,11 @@ class NiMidiSurface: public BaseSurface {
 			}
 			else {
 				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-				if (!name) {
-					name = "";
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
 				}
 				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			}
