@@ -145,16 +145,17 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
-	const int METRO_UPDATE = 30;
+	// ToDo: Rather than putting this in BaseSurface consider to just override Run() in NiMidiSurface and call the superclass : BaseSurface::Run()
+	const int METER_UPDATE = 0; // Update on every call for now (approx. 30/s)
 	static int simpleTimer = 0;
-	this->_peakMixerUpdate(); // ToDo: Maybe update only every 2nd call to save CPU?
-	if (simpleTimer < METRO_UPDATE) {
+	if (simpleTimer < METER_UPDATE) {
 		++simpleTimer;
 	}
 	else {
 		simpleTimer = 0;
-		this->_metronomeUpdate();
+		this->_peakMixerUpdate();
 	}	
+	// --------------------------------------------------------------------------------
 	if (!this->_midiIn) {
 		return;
 	}

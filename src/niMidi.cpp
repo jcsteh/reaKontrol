@@ -14,6 +14,7 @@
 #include <string>
 #include <sstream>
 #include <cstring>
+#include <vector>
 #include "reaKontrol.h"
 
 using namespace std;
@@ -55,7 +56,7 @@ const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
 const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
-const unsigned char CMD_TRACK_MUTED_BY_SOLO = 0x4A; // ToDo: Check back with newer KK firmware if this gets implemented correctly
+const unsigned char CMD_TRACK_MUTED_BY_SOLO = 0x4A;
 const unsigned char CMD_KNOB_VOLUME0 = 0x50;
 const unsigned char CMD_KNOB_VOLUME1 = 0x51;
 const unsigned char CMD_KNOB_VOLUME2 = 0x52;
@@ -85,6 +86,11 @@ const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
 
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
+
+// Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
+const bool HIDE_MUTED_BY_SOLO = false;
+
+#define CSURF_EXT_SETMETRONOME 0x00010002
 
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
@@ -222,7 +228,9 @@ class NiMidiSurface: public BaseSurface {
 		// Using SetSurfaceSelected() rather than OnTrackSelection():
 		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
-		// See also notes in SetSurfaceRecArm
+		
+		// Note: SetSurfaceSelected is also called on project tab change
+		this->_metronomeUpdate(); //check if metronome status has changed when switching project tabs
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -241,13 +249,13 @@ class NiMidiSurface: public BaseSurface {
 			// Set KK Instance Focus
 			g_trackInFocus = id;
 			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0,
-				getKkInstanceName(track));
+				getKkInstanceName(track));			
 		}
 	}
 	
 	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
 		int id = CSurf_TrackToID(track, false);
-		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			char volText[64] = { 0 };
 			mkvolstr(volText, volume);
@@ -258,7 +266,7 @@ class NiMidiSurface: public BaseSurface {
 
 	virtual void SetSurfacePan(MediaTrack* track, double pan) override {
 		int id = CSurf_TrackToID(track, false);
-		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			char panText[64];
 			mkpanstr(panText, pan);
@@ -272,7 +280,7 @@ class NiMidiSurface: public BaseSurface {
 		if (id == g_trackInFocus) {
 			this->_sendCc(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0); // ToDo: does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
 		}
-		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
 		}
@@ -283,23 +291,27 @@ class NiMidiSurface: public BaseSurface {
 		int id = CSurf_TrackToID(track, false);
 		// Ignore solo on master, id = 0 is only used as an "any track is soloed" indicator
 		if (id == 0) {
-			g_anySolo = solo;
+			// If g_anySolo state has changed update the tracks' muted by solo states within the current bank
+			if (g_anySolo != solo) {
+				g_anySolo = solo;
+				this->_allMixerUpdate(); // Everything needs to be updated, not good enough to just update muted_by_solo states
+			}
 			return;
 		}
 		if (id == g_trackInFocus) {
-			this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0); // ToDo: does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
+			this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0); // ToDo: Button light does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
 		}
-		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			if (solo) {
 				g_soloStateBank[numInBank] = 1;
 				this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
-				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, numInBank);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, numInBank);
 			}
 			else {
 				g_soloStateBank[numInBank] = 0;
 				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
-				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
 			}
 		}
 	}
@@ -310,16 +322,25 @@ class NiMidiSurface: public BaseSurface {
 		// This may even depend on settings in preferences? 
 		// => Consider filtering this somehow with state variables in SetSurfaceSelected or just live with it...
 		int id = CSurf_TrackToID(track, false);
-		if ((id >= this->_bankStart) && (id < this->_bankStart + BANK_NUM_TRACKS)) {
+		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			this->_sendSysex(CMD_TRACK_ARMED, armed ? 1 : 0, numInBank);
 		}
+	}
+
+	virtual int Extended(int call, void *parm1, void *parm2, void *parm3) override {
+		if (call != CSURF_EXT_SETMETRONOME) {
+			return 0; // we are only interested in the metronome. Note: This works fine but does not update the status when changing project tabs
+		}
+		this->_sendCc(CMD_METRO, (parm1 == 0) ? 0 : 1);
+		return 1;
 	}
 
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
+			// ToDo: Analyze other incoming MIDI messages too, like Sysex, MCU etc
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
@@ -331,7 +352,8 @@ class NiMidiSurface: public BaseSurface {
 			<< (int)event->midi_message[1] << " "
 			<< (int)event->midi_message[2] << " Focus Track "
 			<< g_trackInFocus << " Bank Start "
-			<< this->_bankStart << " anySolo "
+			<< this->_bankStart << " Bank End "
+			<< this->_bankEnd << " anySolo "
 			<< g_anySolo << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
@@ -466,43 +488,46 @@ class NiMidiSurface: public BaseSurface {
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
 		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
 		char peakBank[(BANK_NUM_TRACKS * 2) + 1];
-		peakBank[(BANK_NUM_TRACKS * 2)] = '\0'; // "end of string" marker
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1;
-		int numTracks = CSurf_NumTracks(false); 		
-		if (bankEnd > numTracks) {
-			bankEnd = numTracks;
-			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
-			peakBank[(lastInLastBank + 1) * 2] = '\0'; // end of string (no tracks available further to the right)
-		}
-		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
 			}
 			j = 2 * numInBank;
-
-			// ToDo: Check with KK firmware improvements if CMD_TRACK_MUTED_BY_SOLO will eventually be implemented correctly.
-		    // In that case the meter bars should be grey and we do not have to supress them entirely as implemented now.
-
-			// If any track is soloed then only soloed tracks and the master show peaks (irrespective of their mute state)
-			if (g_anySolo) {
-				if ((g_soloStateBank[numInBank] == 0) && (numInBank != 0)) {
-					peakBank[j] = 1;
-					peakBank[j + 1] = 1;
+			if (HIDE_MUTED_BY_SOLO) {
+				// If any track is soloed then only soloed tracks and the master show peaks (irrespective of their mute state)
+				if (g_anySolo) {
+					if ((g_soloStateBank[numInBank] == 0) && (((numInBank != 0) && (this->_bankStart == 0)) || (this->_bankStart != 0))) {
+						peakBank[j] = 1;
+						peakBank[j + 1] = 1;
+					}
+					else {
+						peakValue = Track_GetPeakInfo(track, 0); // left channel
+						peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+						peakValue = Track_GetPeakInfo(track, 1); // right channel
+						peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					}
 				}
+				// If no tracks are soloed then muted tracks shall show no peaks
 				else {
-					peakValue = Track_GetPeakInfo(track, 0); // left channel
-					peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
-					peakValue = Track_GetPeakInfo(track, 1); // right channel
-					peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+					if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+						peakBank[j] = 1;
+						peakBank[j + 1] = 1;
+					}
+					else {
+						peakValue = Track_GetPeakInfo(track, 0); // left channel
+						peakBank[j] = volToChar_KkMk2(peakValue); // returns value between 1 and 127
+						peakValue = Track_GetPeakInfo(track, 1); // right channel
+						peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
+					}
 				}
 			}
-			// If no tracks are soloed then muted tracks shall show no peaks
 			else {
-				if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+				// Tracks muted by solo show peaks but they appear greyed out. Muted tracks that are NOT soloed shall show no peaks.
+				if ((g_soloStateBank[numInBank] == 0) && (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr))) {
 					peakBank[j] = 1;
 					peakBank[j + 1] = 1;
 				}
@@ -513,36 +538,19 @@ class NiMidiSurface: public BaseSurface {
 					peakBank[j + 1] = volToChar_KkMk2(peakValue); // returns value between 1 and 127					
 				}
 			}
-		}	
+		}
+		peakBank[j + 2] = '\0'; // end of string (no tracks available further to the right)
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
-	}
-
-	// Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
-	void* GetConfigVar(const char* cVar) {
-		int sztmp;
-		void* p = NULL;
-		if (int iOffset = projectconfig_var_getoffs(cVar, &sztmp))
-		{
-			p = projectconfig_var_addr(EnumProjects(-1, NULL, 0), iOffset);
-		}
-		else
-		{
-			p = get_config_var(cVar, &sztmp);
-		}
-		return p;
-	}
-
-	void _metronomeUpdate() override {
-		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
 
 	private:
 	int _protocolVersion = 0;
-	int _bankStart = -1;
+	int _bankStart = 0;
+	int _bankEnd = 0;
 
 	void _allMixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
+		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
 		// Set bank select button lights
 		int bankLights = 3; // left and right on
@@ -552,47 +560,60 @@ class NiMidiSurface: public BaseSurface {
 		else if (this->_bankStart == 0) {
 			bankLights = 2; // left off, right on
 		}
-		else if (bankEnd >= numTracks) {
+		else if (this->_bankEnd >= numTracks) {
 			bankLights = 1; // left on, right off
 		}
 		this->_sendCc(CMD_NAV_BANKS, bankLights);
-		if (bankEnd > numTracks) {
-			bankEnd = numTracks;
+		if (this->_bankEnd > numTracks) {
+			this->_bankEnd = numTracks;
 			// Mark additional bank tracks as not available
 			int lastInLastBank = numTracks % BANK_NUM_TRACKS;
 			for (int i = 7; i > lastInLastBank; --i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);				
 			}
 		}
-		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
-			// ToDo: While not really necessary consider removing some info polls for master track (i.e. record arm, solo)
+		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
 			}			
+			// Master track needs special consideration: no soloing, no record arm
 			if (id == 0) {
-				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MASTER, numInBank);
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MASTER, 0);
+				this->_sendSysex(CMD_TRACK_NAME, 0, 0, "MASTER");
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, 0);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, 0);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, 0);
 			}
+			// Ordinary tracks can be soloed and record armed
 			else {
 				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
+				int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+				if (soloState == 0) {
+					g_soloStateBank[numInBank] = 0;
+					this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
+					this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+				}
+				else {
+					g_soloStateBank[numInBank] = 1;
+					this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
+					this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, numInBank);
+				}
+				int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
+				this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
+				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
+				}
+				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			}			
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
-			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-			if (soloState == 0) {
-				g_soloStateBank[numInBank] = 0;
-				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
-				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
-			}
-			else {
-				g_soloStateBank[numInBank] = 1;
-				this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
-				this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, numInBank);
-			}
 			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
-			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
-			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
 			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
 			char volText[64];
 			mkvolstr(volText, volume);
@@ -601,33 +622,36 @@ class NiMidiSurface: public BaseSurface {
 			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
 			char panText[64];	
 			mkpanstr(panText, pan);
-			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 uses internal text
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 & 0.5.9 use internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
-			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-			if (!name) {
-				name = "";
-			}
-			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 		}	
 	}
 
 	void _namesMixerUpdate() {
 		int numInBank = 0;
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
+		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false);
-		if (bankEnd > numTracks) {
-			bankEnd = numTracks;
+		if (this->_bankEnd > numTracks) {
+			this->_bankEnd = numTracks;
 		}
-		for (int id = this->_bankStart; id <= bankEnd; ++id, ++numInBank) {
+		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
 			}
-			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-			if (!name) {
-				name = "";
+			if (id == 0) {
+				this->_sendSysex(CMD_TRACK_NAME, 0, 0, "MASTER");
 			}
-			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+			else {
+				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
+				}
+				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+			}
 		}
 	}
 
@@ -764,6 +788,25 @@ class NiMidiSurface: public BaseSurface {
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
 			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
 		}		
+	}
+
+	void* GetConfigVar(const char* cVar) { // Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
+		int sztmp;
+		void* p = NULL;
+		if (int iOffset = projectconfig_var_getoffs(cVar, &sztmp))
+		{
+			p = projectconfig_var_addr(EnumProjects(-1, NULL, 0), iOffset);
+		}
+		else
+		{
+			p = get_config_var(cVar, &sztmp);
+		}
+		return p;
+	}
+
+	void _metronomeUpdate() {
+		// Actively poll the metronome status on project tab changes
+		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
 
 	// ToDo: toggle automation mode
