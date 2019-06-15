@@ -82,7 +82,7 @@ const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
 const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SEL_TRACK_SOLO = 0x67;
 const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68;
-const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: Consider to implement this too (i.e. if g_anySolo and selected track != solo)
+const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
@@ -232,8 +232,9 @@ class NiMidiSurface: public BaseSurface {
 		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
 		
-		// Note: SetSurfaceSelected is also called on project tab change
+		// Note: SetSurfaceSelected is also called on project tab change or when record arming. However, <selected> will only be true if a track selection has changed.
 		this->_metronomeUpdate(); //check if metronome status has changed when switching project tabs
+		// Track selection has changed:
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -241,7 +242,7 @@ class NiMidiSurface: public BaseSurface {
 			this->_bankStart = id - numInBank;
 			if (this->_bankStart != oldBankStart) {
 				// Update everything
-				this->_allMixerUpdate();
+				this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
 			}
 			else {
 				// Update track names
@@ -255,6 +256,12 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0);
 				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0);
 				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0);
+				if (g_anySolo) {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0);
+				}
+				else {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+				}
 			}
 			else {
 				// Master track not available for Mute and Solo
@@ -302,15 +309,32 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
-		// Ignore solo on master, id = 0 is only used as an "any track is soloed" indicator
+		
+		// Ignore solo on master, id = 0 is only used as an "any track is soloed" change indicator
 		if (id == 0) {
 			// If g_anySolo state has changed update the tracks' muted by solo states within the current bank
 			if (g_anySolo != solo) {
 				g_anySolo = solo;
 				this->_allMixerUpdate(); // Everything needs to be updated, not good enough to just update muted_by_solo states
 			}
+			// If any track is soloed the currently selected track will be muted by solo unless it is also soloed
+			if (g_trackInFocus > 0) {
+				if (g_anySolo) {
+					MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+					if (!track) {
+						return;
+					}
+					int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (soloState == 0) ? 1 : 0, 0);
+				}
+				else {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+				}
+			}
 			return;
 		}
+
+		// Solo state has changed on individual tracks:
 		if (id == g_trackInFocus) {
 			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0, 0);
 		}
