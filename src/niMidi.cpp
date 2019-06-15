@@ -81,8 +81,8 @@ const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
 const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SEL_TRACK_SOLO = 0x67;
-const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // ToDo: ?
-const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // ToDo: ?
+const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68;
+const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
@@ -97,6 +97,7 @@ const bool HIDE_MUTED_BY_SOLO = false;
 static int g_trackInFocus = 0;
 static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
+static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
 
 signed char convertSignedMidiValue(unsigned char value) {
 	// Convert a signed 7 bit MIDI value to a signed char.
@@ -154,6 +155,8 @@ class NiMidiSurface: public BaseSurface {
 	NiMidiSurface(int inDev, int outDev)
 	: BaseSurface(inDev, outDev) {
 		this->_sendCc(CMD_HELLO, 0);
+		this->_sendCc(CMD_UNDO, 1);
+		this->_sendCc(CMD_REDO, 1);
 	}
 
 	virtual ~NiMidiSurface() {
@@ -200,7 +203,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
-	// ToDo: add more button lights: AUTO, tbd: undo/redo, clear, quantize, tempo
+	// ToDo: add more button lights: AUTO, clear, quantize, 4D encoder navigation (blue LEDs)
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
@@ -229,8 +232,9 @@ class NiMidiSurface: public BaseSurface {
 		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
 		
-		// Note: SetSurfaceSelected is also called on project tab change
+		// Note: SetSurfaceSelected is also called on project tab change or when record arming. However, <selected> will only be true if a track selection has changed.
 		this->_metronomeUpdate(); //check if metronome status has changed when switching project tabs
+		// Track selection has changed:
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);			
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -238,7 +242,7 @@ class NiMidiSurface: public BaseSurface {
 			this->_bankStart = id - numInBank;
 			if (this->_bankStart != oldBankStart) {
 				// Update everything
-				this->_allMixerUpdate();
+				this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
 			}
 			else {
 				// Update track names
@@ -246,10 +250,25 @@ class NiMidiSurface: public BaseSurface {
 			}
 			// Let Keyboard know about changed track selection
 			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
-			// Set KK Instance Focus
 			g_trackInFocus = id;
-			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0,
-				getKkInstanceName(track));			
+			if (g_trackInFocus != 0) {
+				// Mark selected track as available and update Mute and Solo Button lights
+				this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0);
+				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0);
+				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0);
+				if (g_anySolo) {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0);
+				}
+				else {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+				}
+			}
+			else {
+				// Master track not available for Mute and Solo
+				this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 0, 0);
+			}
+			// Set KK Instance Focus
+			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
 		}
 	}
 	
@@ -278,10 +297,11 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceMute(MediaTrack* track, bool mute) override {
 		int id = CSurf_TrackToID(track, false);
 		if (id == g_trackInFocus) {
-			this->_sendCc(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0); // ToDo: does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
+			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0);
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
+			g_muteStateBank[numInBank] = mute;
 			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
 		}
 	}
@@ -289,17 +309,34 @@ class NiMidiSurface: public BaseSurface {
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
-		// Ignore solo on master, id = 0 is only used as an "any track is soloed" indicator
+		
+		// Ignore solo on master, id = 0 is only used as an "any track is soloed" change indicator
 		if (id == 0) {
 			// If g_anySolo state has changed update the tracks' muted by solo states within the current bank
 			if (g_anySolo != solo) {
 				g_anySolo = solo;
 				this->_allMixerUpdate(); // Everything needs to be updated, not good enough to just update muted_by_solo states
 			}
+			// If any track is soloed the currently selected track will be muted by solo unless it is also soloed
+			if (g_trackInFocus > 0) {
+				if (g_anySolo) {
+					MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+					if (!track) {
+						return;
+					}
+					int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (soloState == 0) ? 1 : 0, 0);
+				}
+				else {
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+				}
+			}
 			return;
 		}
+
+		// Solo state has changed on individual tracks:
 		if (id == g_trackInFocus) {
-			this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0); // ToDo: Button light does not work yet - why? Is an extra track_available required? Or instance? Or SysEx?			
+			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0, 0);
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -340,7 +377,6 @@ class NiMidiSurface: public BaseSurface {
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
-			// ToDo: Analyze other incoming MIDI messages too, like Sysex, MCU etc
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
@@ -413,6 +449,7 @@ class NiMidiSurface: public BaseSurface {
 				// ToDo: Scrubbing very slow. Rather than just amplifying this value
 				// have to evaluate incoming MIDI stream to allow for both fine as well
 				// coarse scrubbing
+				// Or move to next beat, bar etc
 				CSurf_ScrubAmt(convertSignedMidiValue(value)); 
 				break;
 			case CMD_TRACK_SELECTED:
@@ -513,7 +550,7 @@ class NiMidiSurface: public BaseSurface {
 				}
 				// If no tracks are soloed then muted tracks shall show no peaks
 				else {
-					if (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr)) {
+					if (g_muteStateBank[numInBank]) {
 						peakBank[j] = 1;
 						peakBank[j + 1] = 1;
 					}
@@ -526,8 +563,8 @@ class NiMidiSurface: public BaseSurface {
 				}
 			}
 			else {
-				// Tracks muted by solo show peaks but they appear greyed out. Muted tracks that are NOT soloed shall show no peaks.
-				if ((g_soloStateBank[numInBank] == 0) && (*(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr))) {
+				// Muted tracks that are NOT soloed shall show no peaks. Tracks muted by solo show peaks but they appear greyed out.
+				if ((g_soloStateBank[numInBank] == 0) && (g_muteStateBank[numInBank])) {
 					peakBank[j] = 1;
 					peakBank[j + 1] = 1;
 				}
@@ -553,6 +590,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
 		// Set bank select button lights
+		// ToDo: Consider optimizing this piece of code
 		int bankLights = 3; // left and right on
 		if (numTracks < BANK_NUM_TRACKS) {
 			bankLights = 0; // left and right off
@@ -613,6 +651,7 @@ class NiMidiSurface: public BaseSurface {
 			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
 			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
 			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
+			g_muteStateBank[numInBank] = muted;
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
 			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
 			char volText[64];
