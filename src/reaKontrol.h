@@ -44,12 +44,13 @@
 #define REAPERAPI_WANT_CSurf_SetSurfaceMute
 #define REAPERAPI_WANT_CSurf_SetSurfaceSolo
 #define REAPERAPI_WANT_CSurf_SetSurfaceRecArm
-#define REAPERAPI_WANT_CSurf_SetAutoMode
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_CSurf_OnMuteChange
 #define REAPERAPI_WANT_CSurf_OnSoloChange
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_GetGlobalAutomationOverride
+#define REAPERAPI_WANT_SetGlobalAutomationOverride
 #define REAPERAPI_WANT_Track_GetPeakInfo
 #define REAPERAPI_WANT_mkvolstr
 #define REAPERAPI_WANT_mkpanstr

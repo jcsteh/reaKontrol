@@ -38,8 +38,8 @@ const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
-const unsigned char CMD_QUANTIZE = 0x22; // ToDo: ?
-const unsigned char CMD_AUTO = 0x23; // ToDo: Toggle between automation modes
+const unsigned char CMD_QUANTIZE = 0x22; // ToDo: Input Quantize
+const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
@@ -108,13 +108,10 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
-static unsigned char panToChar(double pan)
-{
+static unsigned char panToChar(double pan){
 	pan = (pan + 1.0)*63.5;
-
 	if (pan < 0.0)pan = 0.0;
 	else if (pan > 127.0)pan = 127.0;
-
 	return (unsigned char)(pan + 0.5);
 }
 
@@ -203,7 +200,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
-	// ToDo: add more button lights: AUTO, clear, quantize, 4D encoder navigation (blue LEDs)
+	// ToDo: add button lights for 4D encoder navigation (blue LEDs)
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
@@ -273,31 +270,23 @@ class NiMidiSurface: public BaseSurface {
 				// Set KK Instance Focus
 				this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
 			}
-			if (id == g_trackInFocus) {
+			// Check automation mode
+			// AUTO = ON: touch, write, latch or latch preview
+			// AUTO = OFF: trim or read
+			int globalAutoMode = GetGlobalAutomationOverride();
+			if ((id == g_trackInFocus) && (globalAutoMode == -1)) {
 				// Check automation mode of currently focused track
-				// AUTO = ON: touch, write, latch or latch preview
-				// AUTO = OFF: trim or read
-				int automode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
-				// ToDo: Evaluate Automation global override too
-				this->_sendCc(CMD_AUTO, automode > 1 ? 1 : 0);
+				int autoMode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
+				this->_sendCc(CMD_AUTO, autoMode > 1 ? 1 : 0);
+			}
+			else {
+				// Global Automation Override
+				this->_sendCc(CMD_AUTO, globalAutoMode > 1 ? 1 : 0);
 			}
 		}
 		
 	}
 	
-	/*
-	// ToDo: Get rid of this whole function (also remove from reakontrol.h)
-	virtual void SetAutoMode(int mode) {
-		// The problem with this is that it does not identify which track is affected! It also does not consider global override.
-#ifdef DEBUG_DIAGNOSTICS
-		ostringstream s;
-		s << "Diagnostic: AutoMode " << showbase << hex
-			<< mode << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
-	}
-	*/
-
 	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
@@ -691,6 +680,7 @@ class NiMidiSurface: public BaseSurface {
 		}	
 	}
 
+	// ToDo: maybe this can be scrapped once we implement SetTrackTitle
 	void _namesMixerUpdate() {
 		int numInBank = 0;
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
@@ -733,9 +723,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
-					  // If we rather wanted to "Toggle" than just "Select" we would use:
-					  // int iSel = 0;
-					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		_clearAllSelectedTracks(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
@@ -786,7 +773,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-		CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
+		CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)? If at all it this behaviour should be configured with a CONST
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
@@ -850,24 +837,36 @@ class NiMidiSurface: public BaseSurface {
 				return;
 			}
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
+			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)? If at all it this behaviour should be configured with a CONST
 		}		
 	}
 
 	void _onSelAutoToggle() {
+		if (g_trackInFocus == 0) {
+			// Special function: If the master track is selected & focused then the AUTO button toggles GlobalAutomationOverride
+			int globalAutoMode = GetGlobalAutomationOverride();
+			if (globalAutoMode > 1) {
+				globalAutoMode = -1; // no global override
+			}
+			else {
+				globalAutoMode = 4; // set global override to latch mode
+			}
+			SetGlobalAutomationOverride(globalAutoMode);
+		}
 		if (g_trackInFocus > 0) {
+			// Toggle automation of individual tracks
 			MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
 			if (!track) {
 				return;
 			}
-			int automode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
-			if (automode > 1) {
-				automode = 0; // set to trim mode
+			int autoMode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
+			if (autoMode > 1) {
+				autoMode = 0; // set to trim mode
 			}
 			else {
-				automode = 4; // set to latch mode
+				autoMode = 4; // set to latch mode
 			}
-			GetSetMediaTrackInfo(track, "I_AUTOMODE", &automode);
+			GetSetMediaTrackInfo(track, "I_AUTOMODE", &autoMode);
 		}
 	}
 
@@ -889,8 +888,6 @@ class NiMidiSurface: public BaseSurface {
 		// Actively poll the metronome status on project tab changes
 		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
-
-	// ToDo: toggle automation mode
 
 	void _sendCc(unsigned char command, unsigned char value) {
 		if (this->_midiOut) {
