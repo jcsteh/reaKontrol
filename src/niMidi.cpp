@@ -38,8 +38,8 @@ const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
-const unsigned char CMD_QUANTIZE = 0x22; // ToDo: ?
-const unsigned char CMD_AUTO = 0x23; // ToDo: Toggle between automation modes
+const unsigned char CMD_QUANTIZE = 0x22; // ToDo: Input Quantize
+const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
@@ -94,7 +94,7 @@ const bool HIDE_MUTED_BY_SOLO = false;
 
 // State Information
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
-static int g_trackInFocus = 0;
+static int g_trackInFocus = -1;
 static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
@@ -108,13 +108,10 @@ signed char convertSignedMidiValue(unsigned char value) {
 	return value - 128;
 }
 
-static unsigned char panToChar(double pan)
-{
+static unsigned char panToChar(double pan){
 	pan = (pan + 1.0)*63.5;
-
 	if (pan < 0.0)pan = 0.0;
 	else if (pan > 127.0)pan = 127.0;
-
 	return (unsigned char)(pan + 0.5);
 }
 
@@ -203,14 +200,14 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
-	// ToDo: add more button lights: AUTO, clear, quantize, 4D encoder navigation (blue LEDs)
+	// ToDo: add button lights for 4D encoder navigation (blue LEDs)
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
 		if (g_trackInFocus > numTracks) {
-			g_trackInFocus = numTracks; 
+			g_trackInFocus = numTracks;
 			// Unfortunately we cannot afford to explicitly select the last track automatically because this could screw up
 			// running actions or macros. The plugin must not manipulate track selection without the user deliberately triggering
 			// track selection/navigation on the keyboard (or from within Reaper).
@@ -225,51 +222,69 @@ class NiMidiSurface: public BaseSurface {
 		// the track holding the focused KK instance will also be selected. This situation gets resolved as soon as any form of
 		// track navigation/selection happens (from keyboard or from within Reaper).
 		this->_allMixerUpdate();
+		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
 		
+	// ToDo: SetTrackTitle()
+
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		// Using SetSurfaceSelected() rather than OnTrackSelection():
-		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks).
+		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks, change of any record arm, change of any auto mode).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
+		// Especially record arm leads to a cascade of calls with !selected. It thus requires some event filtering to avoid unecessary CPU and MIDI bandwidth usage
 		
-		// Note: SetSurfaceSelected is also called on project tab change or when record arming. However, <selected> will only be true if a track selection has changed.
-		this->_metronomeUpdate(); //check if metronome status has changed when switching project tabs
-		// Track selection has changed:
 		if (selected) {
-			int id = CSurf_TrackToID(track, false);			
+			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
-			int oldBankStart = this->_bankStart;
-			this->_bankStart = id - numInBank;
-			if (this->_bankStart != oldBankStart) {
-				// Update everything
-				this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
-			}
-			else {
-				// Update track names
-				this->_namesMixerUpdate();
-			}
-			// Let Keyboard know about changed track selection
-			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
-			g_trackInFocus = id;
-			if (g_trackInFocus != 0) {
-				// Mark selected track as available and update Mute and Solo Button lights
-				this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0);
-				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0);
-				this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0);
-				if (g_anySolo) {
-					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0);
+			if (id != g_trackInFocus) {
+				// Track selection has changed
+				g_trackInFocus = id;
+				int oldBankStart = this->_bankStart;
+				this->_bankStart = id - numInBank;
+				if (this->_bankStart != oldBankStart) {
+					// Update everything
+					this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
 				}
 				else {
-					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+					// Update track names
+					this->_namesMixerUpdate(); // ToDo: maybe we can scrap this if we implement SetTrackTitle ()
 				}
+				if (g_trackInFocus != 0) {
+					// Mark selected track as available and update Mute and Solo Button lights
+					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0);
+					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0);
+					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0);
+					if (g_anySolo) {
+						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0);
+					}
+					else {
+						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+					}
+				}
+				else {
+					// Master track not available for Mute and Solo
+					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 0, 0);
+				}
+				// Let Keyboard know about changed track selection
+				this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
+				// Set KK Instance Focus
+				this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
+			}
+			// Check automation mode
+			// AUTO = ON: touch, write, latch or latch preview
+			// AUTO = OFF: trim or read
+			int globalAutoMode = GetGlobalAutomationOverride();
+			if ((id == g_trackInFocus) && (globalAutoMode == -1)) {
+				// Check automation mode of currently focused track
+				int autoMode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
+				this->_sendCc(CMD_AUTO, autoMode > 1 ? 1 : 0);
 			}
 			else {
-				// Master track not available for Mute and Solo
-				this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 0, 0);
+				// Global Automation Override
+				this->_sendCc(CMD_AUTO, globalAutoMode > 1 ? 1 : 0);
 			}
-			// Set KK Instance Focus
-			this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
 		}
+		
 	}
 	
 	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
@@ -354,10 +369,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual void SetSurfaceRecArm(MediaTrack* track, bool armed) override {
-		// ToDo: ISSUE: it seems (confirmed by forum reports) that record arm in Reaper leads to a cascade of callbacks
-		// In our case it seems that also the SetSurfaceSelected gets triggered although no track selection change happened
-		// This may even depend on settings in preferences? 
-		// => Consider filtering this somehow with state variables in SetSurfaceSelected or just live with it...
+		// Note: record arm also leads to a cascade of SetSurfaceSelected callbacks (-> filtering required)
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -429,6 +441,9 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_AUTO:
+				this->_onSelAutoToggle();
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
@@ -648,8 +663,7 @@ class NiMidiSurface: public BaseSurface {
 				}
 				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 			}			
-			int selected = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr);
-			this->_sendSysex(CMD_TRACK_SELECTED, selected, numInBank);
+			this->_sendSysex(CMD_TRACK_SELECTED, id == g_trackInFocus ? 1 : 0, numInBank);
 			bool muted = *(bool*)GetSetMediaTrackInfo(track, "B_MUTE", nullptr);
 			g_muteStateBank[numInBank] = muted;
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
@@ -666,6 +680,7 @@ class NiMidiSurface: public BaseSurface {
 		}	
 	}
 
+	// ToDo: maybe this can be scrapped once we implement SetTrackTitle
 	void _namesMixerUpdate() {
 		int numInBank = 0;
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
@@ -708,9 +723,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int iSel = 1; // "Select"
-					  // If we rather wanted to "Toggle" than just "Select" we would use:
-					  // int iSel = 0;
-					  // int iSel = *(int*)GetSetMediaTrackInfo(track, "I_SELECTED", nullptr) ? 0 : 1; 
 		_clearAllSelectedTracks(); 
 		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
 	}
@@ -761,7 +773,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
 		int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-		CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
+		CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)? If at all it this behaviour should be configured with a CONST
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
@@ -825,8 +837,37 @@ class NiMidiSurface: public BaseSurface {
 				return;
 			}
 			int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)
+			CSurf_OnSoloChange(track, soloState == 0 ? 1 : 0); // ToDo: Consider settings solo state to 2 (soloed in place)? If at all it this behaviour should be configured with a CONST
 		}		
+	}
+
+	void _onSelAutoToggle() {
+		if (g_trackInFocus == 0) {
+			// Special function: If the master track is selected & focused then the AUTO button toggles GlobalAutomationOverride
+			int globalAutoMode = GetGlobalAutomationOverride();
+			if (globalAutoMode > 1) {
+				globalAutoMode = -1; // no global override
+			}
+			else {
+				globalAutoMode = 4; // set global override to latch mode
+			}
+			SetGlobalAutomationOverride(globalAutoMode);
+		}
+		if (g_trackInFocus > 0) {
+			// Toggle automation of individual tracks
+			MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+			if (!track) {
+				return;
+			}
+			int autoMode = *(int*)GetSetMediaTrackInfo(track, "I_AUTOMODE", nullptr);
+			if (autoMode > 1) {
+				autoMode = 0; // set to trim mode
+			}
+			else {
+				autoMode = 4; // set to latch mode
+			}
+			GetSetMediaTrackInfo(track, "I_AUTOMODE", &autoMode);
+		}
 	}
 
 	void* GetConfigVar(const char* cVar) { // Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
@@ -847,8 +888,6 @@ class NiMidiSurface: public BaseSurface {
 		// Actively poll the metronome status on project tab changes
 		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
 	}
-
-	// ToDo: toggle automation mode
 
 	void _sendCc(unsigned char command, unsigned char value) {
 		if (this->_midiOut) {

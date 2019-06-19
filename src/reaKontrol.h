@@ -49,6 +49,8 @@
 #define REAPERAPI_WANT_CSurf_OnMuteChange
 #define REAPERAPI_WANT_CSurf_OnSoloChange
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_GetGlobalAutomationOverride
+#define REAPERAPI_WANT_SetGlobalAutomationOverride
 #define REAPERAPI_WANT_Track_GetPeakInfo
 #define REAPERAPI_WANT_mkvolstr
 #define REAPERAPI_WANT_mkpanstr
