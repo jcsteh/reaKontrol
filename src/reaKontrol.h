@@ -44,6 +44,7 @@
 #define REAPERAPI_WANT_CSurf_SetSurfaceMute
 #define REAPERAPI_WANT_CSurf_SetSurfaceSolo
 #define REAPERAPI_WANT_CSurf_SetSurfaceRecArm
+#define REAPERAPI_WANT_CSurf_SetAutoMode
 #define REAPERAPI_WANT_CSurf_OnVolumeChange
 #define REAPERAPI_WANT_CSurf_OnPanChange
 #define REAPERAPI_WANT_CSurf_OnMuteChange
