@@ -304,7 +304,7 @@ class NiMidiSurface: public BaseSurface {
 			int numInBank = id % BANK_NUM_TRACKS;
 			char panText[64];
 			mkpanstr(panText, pan);
-			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 uses internal text
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}
 	}
@@ -389,6 +389,7 @@ class NiMidiSurface: public BaseSurface {
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
+			// ToDo: Add debugging/analyzer option to investigate additional MIDI messages (e.g. when NIHIA communicates with Maschine)
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
@@ -675,7 +676,7 @@ class NiMidiSurface: public BaseSurface {
 			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
 			char panText[64];	
 			mkpanstr(panText, pan);
-			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // KK firmware 0.5.7 & 0.5.9 use internal text
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}	
 	}
