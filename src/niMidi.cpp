@@ -32,7 +32,7 @@ const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
 const unsigned char CMD_COUNT = 0x13; // ToDo: ?
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15; // ToDo: ?
+const unsigned char CMD_CLEAR = 0x15; // ToDo: Idea: Use this to remove currently selected track? Or delete MIDI in currently recorded item?
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
@@ -43,9 +43,9 @@ const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
-const unsigned char CMD_NAV_SCENES = 0x33; // not used
+const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: ? LOOP + 4D Encoder Rotate
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Idea: Use this to change project BPM? Or change length of MIDI item?
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -74,9 +74,9 @@ const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: ? SHIFT + 4D Encoder Push
-const unsigned char CMD_PLAY_SCENE = 0x62; // not used
-const unsigned char CMD_RECORD_SESSION = 0x63; // not used
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Idea: Use this to loop play currently selected item (maybe flip with above functionality then)?
+const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
+const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
 const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
@@ -227,6 +227,7 @@ class NiMidiSurface: public BaseSurface {
 		// the track holding the focused KK instance will also be selected. This situation gets resolved as soon as any form of
 		// track navigation/selection happens (from keyboard or from within Reaper).
 		this->_allMixerUpdate();
+		// ToDo: Consider sending some updates to force NIHIA to really fully update the display. Maybe in conjunction with changes to peakMixerUpdate?
 		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
 	
