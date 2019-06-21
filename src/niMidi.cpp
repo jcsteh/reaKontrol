@@ -45,7 +45,7 @@ const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33; // not used
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // not used
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: ? LOOP + 4D Encoder Rotate
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -74,7 +74,7 @@ const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // not used
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: ? SHIFT + 4D Encoder Push
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
@@ -201,6 +201,11 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	// ToDo: add button lights for 4D encoder navigation (blue LEDs)
+
+	// ToDo: NIHIA shows a strange behaviour: The mixer view is sometimes not updated completely until any of the following 
+	// parameters change: peak, volume, pan, rec arm, mute, solo 
+	// It seems NIHIA caches certain values to save bandwidth, but this can lead to inconsistencies if we do not constantly push new data to NIHIA
+	// This would also explain the behaviour of the peak indicators...
 		
 	virtual void SetTrackListChange() override {
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
@@ -224,8 +229,21 @@ class NiMidiSurface: public BaseSurface {
 		this->_allMixerUpdate();
 		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
-		
-	// ToDo: SetTrackTitle()
+	
+	virtual void SetTrackTitle(MediaTrack *track, const char *title) override {
+		int id = CSurf_TrackToID(track, false);
+		if ((id > 0) && (id >= this->_bankStart) && (id <= this->_bankEnd)) {
+			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr); // We cannot use *title as it conatins the track number in case the track has no name
+			if ((!name) || (*name == '\0')) {
+				std::string s = "TRACK " + std::to_string(id);
+				std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+				nameGeneric.push_back('\0');
+				name = &nameGeneric[0];
+			}
+			int numInBank = id % BANK_NUM_TRACKS;
+			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+		}
+	}
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		// Using SetSurfaceSelected() rather than OnTrackSelection():
@@ -244,10 +262,6 @@ class NiMidiSurface: public BaseSurface {
 				if (this->_bankStart != oldBankStart) {
 					// Update everything
 					this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
-				}
-				else {
-					// Update track names
-					this->_namesMixerUpdate(); // ToDo: maybe we can scrap this if we implement SetTrackTitle ()
 				}
 				if (g_trackInFocus != 0) {
 					// Mark selected track as available and update Mute and Solo Button lights
@@ -536,11 +550,12 @@ class NiMidiSurface: public BaseSurface {
 		// ToDo: Peak Hold in KK display shall be erased immediately when changing bank
 		// ToDo: Peak Hold in KK display shall be erased after decay time t when track muted or no signal.
 		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
+		// ToDo: Consider caching and not sending anything via SysEx if no values have changed.
 		
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
 		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
-		char peakBank[(BANK_NUM_TRACKS * 2) + 1];
+		static char peakBank[(BANK_NUM_TRACKS * 2) + 1];
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -679,35 +694,6 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}	
-	}
-
-	// ToDo: maybe this can be scrapped once we implement SetTrackTitle
-	void _namesMixerUpdate() {
-		int numInBank = 0;
-		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
-		int numTracks = CSurf_NumTracks(false);
-		if (this->_bankEnd > numTracks) {
-			this->_bankEnd = numTracks;
-		}
-		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
-			MediaTrack* track = CSurf_TrackFromID(id, false);
-			if (!track) {
-				break;
-			}
-			if (id == 0) {
-				this->_sendSysex(CMD_TRACK_NAME, 0, 0, "MASTER");
-			}
-			else {
-				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-				if ((!name) || (*name == '\0')) {
-					std::string s = "TRACK " + std::to_string(id);
-					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
-					nameGeneric.push_back('\0');
-					name = &nameGeneric[0];
-				}
-				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
-			}
-		}
 	}
 
 	void _clearAllSelectedTracks() {
