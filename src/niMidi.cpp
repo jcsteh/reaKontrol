@@ -8,6 +8,7 @@
  * License: GNU General Public License version 2.0
  */
 
+// #define CALLBACK_DIAGNOSTICS
 #define DEBUG_DIAGNOSTICS
 #define BASIC_DIAGNOSTICS
 
@@ -32,7 +33,7 @@ const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
 const unsigned char CMD_COUNT = 0x13; // ToDo: ?
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15; // ToDo: ?
+const unsigned char CMD_CLEAR = 0x15; // ToDo: Idea: Use this to remove currently selected track? Or delete MIDI in currently recorded item?
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
@@ -43,9 +44,9 @@ const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
-const unsigned char CMD_NAV_SCENES = 0x33; // not used
+const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // not used
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Idea: Use this to change project BPM? Or change length of MIDI item?
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -74,9 +75,9 @@ const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // not used
-const unsigned char CMD_PLAY_SCENE = 0x62; // not used
-const unsigned char CMD_RECORD_SESSION = 0x63; // not used
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Idea: Use this to loop play currently selected item (maybe flip with above functionality then)?
+const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
+const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
 const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
@@ -92,7 +93,7 @@ const bool HIDE_MUTED_BY_SOLO = false;
 
 #define CSURF_EXT_SETMETRONOME 0x00010002
 
-// State Information
+// State Information (Cache)
 // ToDo: Rather than using glocal variables consider moving these into the BaseSurface class declaration
 static int g_trackInFocus = -1;
 static bool g_anySolo = false;
@@ -144,8 +145,19 @@ static unsigned char volToChar_KkMk2(double volume) {
 	return (unsigned char)(result + 0.5); // rounding and make sure that minimum value returned is 1
 }
 
-// ToDo: Some Reaper callbacks (Set....) are called unecessarily (?) often in Reaper, see various forum reports & comments from schwa
+// ==============================================================================================================================
+// ToDo: Callback vs polling Architecture. The approach here is to use a callback architecture when possible and poll only if
+// callbacks are not available, or behave inefficiently or do not report reliably
+// Some Reaper callbacks (Set....) are called unecessarily (?) often in Reaper, see various forum reports & comments from schwa
 // => Consider state checking statements at beginning of every callback to return immediately if call is not necessary -> save CPU
+// Notably this thread: https://forum.cockos.com/showthread.php?t=49536
+// ==============================================================================================================================
+
+// ToDo: NIHIA shows a strange behaviour: The mixer view is sometimes not updated completely until any of the following 
+// parameters change: peak, volume, pan, rec arm, mute, solo 
+// It seems NIHIA caches certain values to save bandwidth, but this can lead to inconsistencies if we do not constantly push new data to NIHIA
+// This would also explain the behaviour of the peak indicators...
+
 
 class NiMidiSurface: public BaseSurface {
 	public:
@@ -169,6 +181,11 @@ class NiMidiSurface: public BaseSurface {
 	}
 		
 	virtual void SetPlayState(bool play, bool pause, bool rec) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetPlayState " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		// Update transport button lights
 		if (rec) {
 			this->_sendCc(CMD_REC, 1);
@@ -191,6 +208,11 @@ class NiMidiSurface: public BaseSurface {
 	}
 		
 	virtual void SetRepeatState(bool rep) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetRepeatState " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		// Update repeat (aka loop) button light
 		if (rep) {
 			this->_sendCc(CMD_LOOP, 1);
@@ -201,8 +223,14 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	// ToDo: add button lights for 4D encoder navigation (blue LEDs)
-		
+
+	
 	virtual void SetTrackListChange() override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetTrackListChange " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
@@ -222,20 +250,29 @@ class NiMidiSurface: public BaseSurface {
 		// the track holding the focused KK instance will also be selected. This situation gets resolved as soon as any form of
 		// track navigation/selection happens (from keyboard or from within Reaper).
 		this->_allMixerUpdate();
+		// ToDo: Consider sending some updates to force NIHIA to really fully update the display. Maybe in conjunction with changes to peakMixerUpdate?
 		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
-		
-	// ToDo: SetTrackTitle()
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
-		// Using SetSurfaceSelected() rather than OnTrackSelection():
-		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks, change of any record arm, change of any auto mode).
+		// Use this callback for:
+		// - changed track selection and KK instance focus
+		// - changed automation mode
+		// - changed track name
+
+		// Using SetSurfaceSelected() rather than OnTrackSelection() or SetTrackTitle():
+		// SetSurfaceSelected() is less economical because it will be called multiple times when something changes (also for unselecting tracks, change of any record arm, change of any auto mode, change of name, ...).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
-		// Especially record arm leads to a cascade of calls with !selected. It thus requires some event filtering to avoid unecessary CPU and MIDI bandwidth usage
-		
+		// An good solution for efficiency is to only evaluate messages with (selected == true).
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceSelected - Track: " << CSurf_TrackToID(track, false) << " Selected: " << selected << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif		
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
+			// ---------------- Track Selection and Instance Focus ----------------
 			if (id != g_trackInFocus) {
 				// Track selection has changed
 				g_trackInFocus = id;
@@ -244,10 +281,6 @@ class NiMidiSurface: public BaseSurface {
 				if (this->_bankStart != oldBankStart) {
 					// Update everything
 					this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
-				}
-				else {
-					// Update track names
-					this->_namesMixerUpdate(); // ToDo: maybe we can scrap this if we implement SetTrackTitle ()
 				}
 				if (g_trackInFocus != 0) {
 					// Mark selected track as available and update Mute and Solo Button lights
@@ -270,7 +303,8 @@ class NiMidiSurface: public BaseSurface {
 				// Set KK Instance Focus
 				this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
 			}
-			// Check automation mode
+			// ------------------------- Automation Mode -----------------------
+			// Update automation mode
 			// AUTO = ON: touch, write, latch or latch preview
 			// AUTO = OFF: trim or read
 			int globalAutoMode = GetGlobalAutomationOverride();
@@ -283,11 +317,31 @@ class NiMidiSurface: public BaseSurface {
 				// Global Automation Override
 				this->_sendCc(CMD_AUTO, globalAutoMode > 1 ? 1 : 0);
 			}
+			// --------------------------- Track Names --------------------------
+			// Update selected track name
+			// Note: Rather than using a callback SetTrackTitle(MediaTrack *track, const char *title) we update the name within
+			// SetSurfaceSelected as it will be called anyway when the track name changes and SetTrackTitle sometimes receives 
+			// cascades of calls for all tracks even if only one name changed
+			if ((id > 0) && (id >= this->_bankStart) && (id <= this->_bankEnd)) {
+				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
+				}
+				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+			}
 		}
-		
 	}
 	
-	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
+	// ToDo: Consider also caching volume (MIDI value and string) to improve efficiency
+	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceVolume - Track: " << CSurf_TrackToID(track, false) << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -298,7 +352,13 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	// ToDo: Consider also caching pan (MIDI value and string) to improve efficiency
 	virtual void SetSurfacePan(MediaTrack* track, double pan) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfacePan - Track: " << CSurf_TrackToID(track, false) << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -310,22 +370,34 @@ class NiMidiSurface: public BaseSurface {
 	}
 		
 	virtual void SetSurfaceMute(MediaTrack* track, bool mute) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceMute - Track: " << CSurf_TrackToID(track, false) << " Mute " << mute << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		int id = CSurf_TrackToID(track, false);
 		if (id == g_trackInFocus) {
 			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0);
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
-			g_muteStateBank[numInBank] = mute;
-			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
+			if (g_muteStateBank[numInBank] != mute) { // Efficiency: only send updates if soemthing changed
+				g_muteStateBank[numInBank] = mute;
+				this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
+			}
 		}
 	}
 		
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceSolo - Track: " << CSurf_TrackToID(track, false) << " Solo "<< solo << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
 		
-		// Ignore solo on master, id = 0 is only used as an "any track is soloed" change indicator
+		// --------- MASTER: Ignore solo on master, id = 0 is only used as an "any track is soloed" change indicator ------------
 		if (id == 0) {
 			// If g_anySolo state has changed update the tracks' muted by solo states within the current bank
 			if (g_anySolo != solo) {
@@ -349,27 +421,36 @@ class NiMidiSurface: public BaseSurface {
 			return;
 		}
 
-		// Solo state has changed on individual tracks:
+		// ------------------------- TRACKS: Solo state has changed on individual tracks ----------------------------------------
 		if (id == g_trackInFocus) {
 			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0, 0);
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
 			if (solo) {
-				g_soloStateBank[numInBank] = 1;
-				this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
-				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, numInBank);
+				if (g_soloStateBank[numInBank] != 1) {
+					g_soloStateBank[numInBank] = 1;
+					this->_sendSysex(CMD_TRACK_SOLOED, 1, numInBank);
+					this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, numInBank);
+				}
 			}
 			else {
-				g_soloStateBank[numInBank] = 0;
-				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
-				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+				if (g_soloStateBank[numInBank] != 0) {
+					g_soloStateBank[numInBank] = 0;
+					this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
+					this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, g_anySolo ? 1 : 0, numInBank);
+				}
 			}
 		}
 	}
 
 	virtual void SetSurfaceRecArm(MediaTrack* track, bool armed) override {
-		// Note: record arm also leads to a cascade of SetSurfaceSelected callbacks (-> filtering required)
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceRecArm - Track: " << CSurf_TrackToID(track, false) << " Armed " << armed << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
+		// Note: record arm also leads to a cascade of other callbacks (-> filtering required!)
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -536,11 +617,12 @@ class NiMidiSurface: public BaseSurface {
 		// ToDo: Peak Hold in KK display shall be erased immediately when changing bank
 		// ToDo: Peak Hold in KK display shall be erased after decay time t when track muted or no signal.
 		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
+		// ToDo: Consider caching and not sending anything via SysEx if no values have changed.
 		
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
 		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
-		char peakBank[(BANK_NUM_TRACKS * 2) + 1];
+		static char peakBank[(BANK_NUM_TRACKS * 2) + 1];
 		int j = 0;
 		double peakValue = 0;		
 		int numInBank = 0;
@@ -602,6 +684,11 @@ class NiMidiSurface: public BaseSurface {
 	int _bankEnd = 0;
 
 	void _allMixerUpdate() {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: allMixerUpdate " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		int numInBank = 0;
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
@@ -678,35 +765,6 @@ class NiMidiSurface: public BaseSurface {
 			mkpanstr(panText, pan);
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
-		}	
-	}
-
-	// ToDo: maybe this can be scrapped once we implement SetTrackTitle
-	void _namesMixerUpdate() {
-		int numInBank = 0;
-		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
-		int numTracks = CSurf_NumTracks(false);
-		if (this->_bankEnd > numTracks) {
-			this->_bankEnd = numTracks;
-		}
-		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
-			MediaTrack* track = CSurf_TrackFromID(id, false);
-			if (!track) {
-				break;
-			}
-			if (id == 0) {
-				this->_sendSysex(CMD_TRACK_NAME, 0, 0, "MASTER");
-			}
-			else {
-				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
-				if ((!name) || (*name == '\0')) {
-					std::string s = "TRACK " + std::to_string(id);
-					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
-					nameGeneric.push_back('\0');
-					name = &nameGeneric[0];
-				}
-				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
-			}
 		}
 	}
 
