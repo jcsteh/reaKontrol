@@ -8,6 +8,7 @@
  * License: GNU General Public License version 2.0
  */
 
+#define CALLBACK_DIAGNOSTICS
 #define DEBUG_DIAGNOSTICS
 #define BASIC_DIAGNOSTICS
 
@@ -208,6 +209,11 @@ class NiMidiSurface: public BaseSurface {
 	// This would also explain the behaviour of the peak indicators...
 		
 	virtual void SetTrackListChange() override {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetTrackListChange " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
@@ -230,28 +236,22 @@ class NiMidiSurface: public BaseSurface {
 		// ToDo: Consider sending some updates to force NIHIA to really fully update the display. Maybe in conjunction with changes to peakMixerUpdate?
 		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
-	
-	virtual void SetTrackTitle(MediaTrack *track, const char *title) override {
-		int id = CSurf_TrackToID(track, false);
-		if ((id > 0) && (id >= this->_bankStart) && (id <= this->_bankEnd)) {
-			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr); // We cannot use *title as it conatins the track number in case the track has no name
-			if ((!name) || (*name == '\0')) {
-				std::string s = "TRACK " + std::to_string(id);
-				std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
-				nameGeneric.push_back('\0');
-				name = &nameGeneric[0];
-			}
-			int numInBank = id % BANK_NUM_TRACKS;
-			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
-		}
-	}
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
+		// Use this callback for:
+		// - changed track selection and KK instance focus
+		// - changed automation mode
+		// - changed track name
+
 		// Using SetSurfaceSelected() rather than OnTrackSelection():
-		// SetSurfaceSelected() is less economical because it will be called multiple times (also for unselecting tracks, change of any record arm, change of any auto mode).
+		// SetSurfaceSelected() is less economical because it will be called multiple times when something changes (also for unselecting tracks, change of any record arm, change of any auto mode, change of name, ...).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
 		// Especially record arm leads to a cascade of calls with !selected. It thus requires some event filtering to avoid unecessary CPU and MIDI bandwidth usage
-		
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: SetSurfaceSelected - Track: " << CSurf_TrackToID(track, false) << " Selected: " << selected << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif		
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -285,7 +285,7 @@ class NiMidiSurface: public BaseSurface {
 				// Set KK Instance Focus
 				this->_sendSysex(CMD_SET_KK_INSTANCE, 0, 0, getKkInstanceName(track));
 			}
-			// Check automation mode
+			// Update automation mode
 			// AUTO = ON: touch, write, latch or latch preview
 			// AUTO = OFF: trim or read
 			int globalAutoMode = GetGlobalAutomationOverride();
@@ -298,8 +298,21 @@ class NiMidiSurface: public BaseSurface {
 				// Global Automation Override
 				this->_sendCc(CMD_AUTO, globalAutoMode > 1 ? 1 : 0);
 			}
+			// Update selected track name
+			// Note: Rather than using a callback SetTrackTitle(MediaTrack *track, const char *title) we update the name within
+			// SetSurfaceSelected as it will be called anyway when the track name changes and SetTrackTitle sometimes receives 
+			// cascades of calls for all tracks even if only one name changed
+			if ((id > 0) && (id >= this->_bankStart) && (id <= this->_bankEnd)) {
+				char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+				if ((!name) || (*name == '\0')) {
+					std::string s = "TRACK " + std::to_string(id);
+					std::vector<char> nameGeneric(s.begin(), s.end()); // memory safe conversion to C style char
+					nameGeneric.push_back('\0');
+					name = &nameGeneric[0];
+				}
+				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+			}
 		}
-		
 	}
 	
 	virtual void SetSurfaceVolume(MediaTrack* track, double volume) override {		
@@ -618,6 +631,11 @@ class NiMidiSurface: public BaseSurface {
 	int _bankEnd = 0;
 
 	void _allMixerUpdate() {
+#ifdef CALLBACK_DIAGNOSTICS
+		ostringstream s;
+		s << "CALL: allMixerUpdate " << endl;
+		ShowConsoleMsg(s.str().c_str());
+#endif
 		int numInBank = 0;
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
@@ -694,7 +712,7 @@ class NiMidiSurface: public BaseSurface {
 			mkpanstr(panText, pan);
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
-		}	
+		}
 	}
 
 	void _clearAllSelectedTracks() {
