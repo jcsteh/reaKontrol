@@ -1,4 +1,6 @@
-# ReaKontrol-Fork
+![alt text](ReaKontrol_v092_img.jpg?raw=true)
+
+# ReaKontrol
 - Fork of the excellent ReaKontrol repository published by James Teh: https://github.com/jcsteh/reaKontrol
 - Fork Author: brumbear@pacificpeaks
 - Fork Copyright: 2019 Pacific Peaks Studio, see individual copyrights in source code
@@ -16,9 +18,7 @@ This fork is mainly a bleeding edge development branch aiming to continuously ad
 - New features are also offered to the upstream repository @ https://github.com/jcsteh/reaKontrol
 - Some updated features may or may not be merged with the upstream master due to possibly different priorities
 - The sequence in which new features are published may be different between this fork and the upstream repository due to possibly different priorities
-
-## Which branch should you follow?
-- To the extent that features are integrated into the upstream master it is recommended to stick to the parent repository @ https://github.com/jcsteh/reaKontrol. The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
+- The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
 
 ## Build instructions and additional description
 - Please refer to the parent repository @ https://github.com/jcsteh/reaKontrol
