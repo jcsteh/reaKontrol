@@ -9,8 +9,8 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-#define DEBUG_DIAGNOSTICS
-#define BASIC_DIAGNOSTICS
+// #define DEBUG_DIAGNOSTICS
+// #define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
@@ -31,7 +31,7 @@ const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
-const unsigned char CMD_COUNT = 0x13; // ToDo: ?
+const unsigned char CMD_COUNT = 0x13; // ToDo: Idea: Use this for pre-roll or record arm selected track?
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ToDo: Idea: Use this to remove currently selected track? Or delete MIDI in currently recorded item?
 const unsigned char CMD_LOOP = 0x16;
@@ -46,7 +46,7 @@ const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Idea: Use this to change project BPM? Or change length of MIDI item?
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Idea: Use this to change time selection length (action 40322/40323)? Or project BPM? Or change length of MIDI item?
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -679,7 +679,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	private:
-	int _protocolVersion = 0;
+	int _protocolVersion = 0; // ToDo: Try different protocol versions (maybe more buttons available?)
 	int _bankStart = 0;
 	int _bankEnd = 0;
 
