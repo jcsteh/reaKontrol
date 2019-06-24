@@ -75,7 +75,7 @@ const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Idea: Use this to loop play currently selected item (maybe flip with above functionality then)?
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Idea: Use this to loop play currently selected item (maybe flip with above functionality then)? Or use to record arm selected track (and use Count in for pre-roll)
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
