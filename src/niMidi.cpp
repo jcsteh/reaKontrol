@@ -80,10 +80,10 @@ const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_SEL_TRACK_PAN = 0x65;
-const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66;
-const unsigned char CMD_TOGGLE_SEL_TRACK_SOLO = 0x67;
-const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68;
-const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69;
+const unsigned char CMD_TOGGLE_SEL_TRACK_MUTE = 0x66; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
+const unsigned char CMD_TOGGLE_SEL_TRACK_SOLO = 0x67; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
+const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
+const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
 
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
@@ -284,19 +284,25 @@ class NiMidiSurface: public BaseSurface {
 				}
 				if (g_trackInFocus != 0) {
 					// Mark selected track as available and update Mute and Solo Button lights
-					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0);
-					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0);
-					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0);
+					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 1, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_SEL_TRACK_AVAILABLE, 1); // Needed by NIHIA v1.8.8 (KK v2.1.3)
+					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_TOGGLE_SEL_TRACK_MUTE, g_muteStateBank[numInBank] ? 1 : 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
+					this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank], 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, g_soloStateBank[numInBank]); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 					if (g_anySolo) {
-						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0);
+						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+						this->_sendCc(CMD_SEL_TRACK_MUTED_BY_SOLO, (g_soloStateBank[numInBank] == 0) ? 1 : 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 					}
 					else {
-						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+						this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+						this->_sendCc(CMD_SEL_TRACK_MUTED_BY_SOLO, 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 					}
 				}
 				else {
 					// Master track not available for Mute and Solo
-					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 0, 0);
+					this->_sendSysex(CMD_SEL_TRACK_AVAILABLE, 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_SEL_TRACK_AVAILABLE, 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 				}
 				// Let Keyboard know about changed track selection
 				this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
@@ -377,7 +383,8 @@ class NiMidiSurface: public BaseSurface {
 #endif
 		int id = CSurf_TrackToID(track, false);
 		if (id == g_trackInFocus) {
-			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0);
+			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+			this->_sendCc(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -412,10 +419,12 @@ class NiMidiSurface: public BaseSurface {
 						return;
 					}
 					int soloState = *(int*)GetSetMediaTrackInfo(track, "I_SOLO", nullptr);
-					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (soloState == 0) ? 1 : 0, 0);
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, (soloState == 0) ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_SEL_TRACK_MUTED_BY_SOLO, (soloState == 0) ? 1 : 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 				}
 				else {
-					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0);
+					this->_sendSysex(CMD_SEL_TRACK_MUTED_BY_SOLO, 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+					this->_sendCc(CMD_SEL_TRACK_MUTED_BY_SOLO, 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 				}
 			}
 			return;
@@ -423,7 +432,8 @@ class NiMidiSurface: public BaseSurface {
 
 		// ------------------------- TRACKS: Solo state has changed on individual tracks ----------------------------------------
 		if (id == g_trackInFocus) {
-			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0, 0);
+			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
+			this->_sendCc(CMD_TOGGLE_SEL_TRACK_SOLO, solo ? 1 : 0); // Needed by NIHIA v1.8.8 (KK v2.1.3)
 		}
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -679,7 +689,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	private:
-	int _protocolVersion = 0; // ToDo: Try different protocol versions (maybe more buttons available?)
+	int _protocolVersion = 0;
 	int _bankStart = 0;
 	int _bankEnd = 0;
 
