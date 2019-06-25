@@ -179,7 +179,14 @@ class NiMidiSurface: public BaseSurface {
 	virtual const char* GetDescString() override {
 		return "Komplete Kontrol S-series Mk2/A-series/M-series";
 	}
-		
+
+	virtual void Run() override {
+		// Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
+		this->_peakMixerUpdate();
+		// --------------------------------------------------------------------------------
+		BaseSurface::Run();
+	}
+
 	virtual void SetPlayState(bool play, bool pause, bool rec) override {
 #ifdef CALLBACK_DIAGNOSTICS
 		ostringstream s;
@@ -476,6 +483,8 @@ class NiMidiSurface: public BaseSurface {
 		return 1;
 	}
 
+	//===============================================================================================================================
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -621,20 +630,27 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
-	void _peakMixerUpdate() override {
+	//===============================================================================================================================
+
+	private:
+	int _protocolVersion = 0;
+	int _bankStart = 0;
+	int _bankEnd = 0;
+
+	void _peakMixerUpdate() {
 		// Peak meters. Note: Reaper reports peak, NOT VU	
 
 		// ToDo: Peak Hold in KK display shall be erased immediately when changing bank
 		// ToDo: Peak Hold in KK display shall be erased after decay time t when track muted or no signal.
 		// ToDo: Explore the effect of sending CMD_SEL_TRACK_PARAMS_CHANGED after sending CMD_TRACK_VU
 		// ToDo: Consider caching and not sending anything via SysEx if no values have changed.
-		
+
 		// Meter information is sent to KK as array (string of chars) for all 16 channels (8 x stereo) of one bank.
 		// A value of 0 will result in stopping to refresh meters further to right as it is interpretated as "end of string".
 		// peakBank[0]..peakBank[31] are used for data. The array needs one additional last char peakBank[32] set as "end of string" marker.
 		static char peakBank[(BANK_NUM_TRACKS * 2) + 1];
 		int j = 0;
-		double peakValue = 0;		
+		double peakValue = 0;
 		int numInBank = 0;
 		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
@@ -687,11 +703,6 @@ class NiMidiSurface: public BaseSurface {
 		peakBank[j + 2] = '\0'; // end of string (no tracks available further to the right)
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, peakBank);
 	}
-
-	private:
-	int _protocolVersion = 0;
-	int _bankStart = 0;
-	int _bankEnd = 0;
 
 	void _allMixerUpdate() {
 #ifdef CALLBACK_DIAGNOSTICS
