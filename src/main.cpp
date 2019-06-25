@@ -145,9 +145,6 @@ BaseSurface::~BaseSurface() {
 }
 
 void BaseSurface::Run() {
-	// ToDo: Rather than putting this in BaseSurface consider to just override Run() in NiMidiSurface and call the superclass : BaseSurface::Run()
-	this->_peakMixerUpdate();
-	// --------------------------------------------------------------------------------
 	if (!this->_midiIn) {
 		return;
 	}

@@ -102,11 +102,7 @@ class McuSurface: public BaseSurface {
 		message += MIDI_SYSEX_END;
 		this->_sendRaw(message);
 	}
-
-	void _peakMixerUpdate() override {
-		// DUMMY. Currently only implemented for niMiDi (Mk2). Maybe better to move Run() callback into niMidi.cpp and mcu.cpp?
-	}
-
+	
 	private:
 	void _sendRaw(const string& message) {
 		// MIDI_event_t includes 4 bytes for the message, but we need more.
