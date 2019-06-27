@@ -9,8 +9,8 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-// #define DEBUG_DIAGNOSTICS
-// #define BASIC_DIAGNOSTICS
+#define DEBUG_DIAGNOSTICS
+#define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
@@ -229,9 +229,6 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendCc(CMD_LOOP, 0);
 		}
 	}
-
-	// ToDo: add button lights for 4D encoder navigation (blue LEDs)
-
 	
 	virtual void SetTrackListChange() override {
 #ifdef CALLBACK_DIAGNOSTICS
@@ -288,7 +285,19 @@ class NiMidiSurface: public BaseSurface {
 				this->_bankStart = id - numInBank;
 				if (this->_bankStart != oldBankStart) {
 					// Update everything
-					this->_allMixerUpdate(); // Note: this will also update the g_muteStateBank and g_soloStateBank caches
+					this->_allMixerUpdate(); // Note: this will also update 4D track nav LEDs, g_muteStateBank and g_soloStateBank caches
+				}
+				else {
+					// Update 4D Encoder track navigation LEDs
+					int numTracks = CSurf_NumTracks(false);
+					int trackNavLights = 3; // left and right on
+					if (g_trackInFocus < 2) {
+						trackNavLights &= 2; // left off
+					}
+					if (g_trackInFocus >= numTracks) {
+						trackNavLights &= 1; // right off
+					}
+					this->_sendCc(CMD_NAV_TRACKS, trackNavLights);
 				}
 				if (g_trackInFocus != 0) {
 					// Mark selected track as available and update Mute and Solo Button lights
@@ -556,6 +565,7 @@ class NiMidiSurface: public BaseSurface {
 				this->_onBankSelect(convertSignedMidiValue(value));
 				break; 
 			case CMD_NAV_CLIPS:
+				// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
 					40173 : // Markers: Go to next marker/project end
@@ -715,7 +725,7 @@ class NiMidiSurface: public BaseSurface {
 		int numInBank = 0;
 		this->_bankEnd = this->_bankStart + BANK_NUM_TRACKS - 1; // avoid ambiguity: track counting always zero based
 		int numTracks = CSurf_NumTracks(false); 
-		// Set bank select button lights
+		// Update bank select button lights
 		// ToDo: Consider optimizing this piece of code
 		int bankLights = 3; // left and right on
 		if (numTracks < BANK_NUM_TRACKS) {
@@ -736,6 +746,16 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);				
 			}
 		}
+		// Update 4D Encoder track navigation LEDs
+		int trackNavLights = 3; // left and right on
+		if (g_trackInFocus < 2) {
+			trackNavLights &= 2; // left off
+		}
+		if (g_trackInFocus >= numTracks) {
+			trackNavLights &= 1; // right off
+		}
+		this->_sendCc(CMD_NAV_TRACKS, trackNavLights);
+		// Update current bank
 		for (int id = this->_bankStart; id <= this->_bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
