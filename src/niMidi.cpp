@@ -33,7 +33,7 @@ const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for selected track (#9)
 const unsigned char CMD_COUNT = 0x13; // ToDo: Togggle pre-roll for recording (#41819). How to indicate this? Maybe automatically open the metronome and pre roll settings window (#40363)?
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15; // ToDo: 1x = Remove selected item (#40006), 2x = Reove Selected Track (#40005). ExtEdit: Insert track (#40001)
+const unsigned char CMD_CLEAR = 0x15; // ToDo: ExtEdit: Remove Selected Track (#40005)
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
@@ -74,8 +74,8 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Use this to enter extEditMode.
+const unsigned char CMD_PLAY_CLIP = 0x60; // Refocus bank. ToDo: ExtEdit: Insert track (#40001)
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Enter extEditMode.
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
@@ -167,6 +167,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_HELLO, 0);
 		this->_sendCc(CMD_UNDO, 1);
 		this->_sendCc(CMD_REDO, 1);
+		this->_sendCc(CMD_CLEAR, 1);
 	}
 
 	virtual ~NiMidiSurface() {
@@ -537,6 +538,9 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
+				break;
+			case CMD_CLEAR:
+				Main_OnCommand(40006, 0); // Edit: Remove selected item
 				break;
 			case CMD_LOOP:
 				Main_OnCommand(1068, 0); // Transport: Toggle repeat
