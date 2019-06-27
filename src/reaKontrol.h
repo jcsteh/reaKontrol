@@ -58,6 +58,7 @@
 #define REAPERAPI_WANT_projectconfig_var_getoffs
 #define REAPERAPI_WANT_projectconfig_var_addr
 #define REAPERAPI_WANT_EnumProjects
+#define REAPERAPI_WANT_SetMixerScroll
 
 
 #include <reaper/reaper_plugin.h>

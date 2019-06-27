@@ -613,9 +613,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_PLAY_CLIP:
 				// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
-				// ToDo: Move this into dedicated function and also select the track in Reaper & unselect all other tracks in Reaper
-				this->_bankStart = (int)(g_trackInFocus / BANK_NUM_TRACKS) * BANK_NUM_TRACKS;
-				this->_allMixerUpdate();
+				_onRefocusBank();
 				break;
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
@@ -855,6 +853,26 @@ class NiMidiSurface: public BaseSurface {
 			return;
 		}
 		this->_bankStart = newBankStart;
+		this->_allMixerUpdate();
+	}
+
+	void _onRefocusBank() {
+		// Switch Mixer view to the bank containing the currently focused (= selected) track and also focus Reaper's TCP and MCP
+		if (g_trackInFocus < 1) {
+			return;
+		}
+		int numTracks = CSurf_NumTracks(false);
+		// Backstop measure to protect against unreported track removal that was not captured in SetTrackListChange callback due to race condition
+		if (g_trackInFocus > numTracks) {
+			g_trackInFocus = numTracks;
+		}
+		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+		int iSel = 1; // "Select"
+		_clearAllSelectedTracks();
+		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+		Main_OnCommand(40913, 0); // Vertical scroll selected track into view (TCP)
+		SetMixerScroll(track); // Horizontal scroll making the selected track the leftmost track if possible (MCP)
+		this->_bankStart = (int)(g_trackInFocus / BANK_NUM_TRACKS) * BANK_NUM_TRACKS;
 		this->_allMixerUpdate();
 	}
 
