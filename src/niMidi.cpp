@@ -30,23 +30,23 @@ const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
-const unsigned char CMD_REC = 0x12;
-const unsigned char CMD_COUNT = 0x13; // ToDo: Idea: Use this for pre-roll or record arm selected track?
+const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for selected track (#9)
+const unsigned char CMD_COUNT = 0x13; // ToDo: Togggle pre-roll for recording (#41819). How to indicate this? Maybe automatically open the metronome and pre roll settings window (#40363)?
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15; // ToDo: Idea: Use this to remove currently selected track? Or delete MIDI in currently recorded item?
+const unsigned char CMD_CLEAR = 0x15; // ToDo: 1x = Remove selected item (#40006), 2x = Reove Selected Track (#40005). ExtEdit: Insert track (#40001)
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
-const unsigned char CMD_TEMPO = 0x18;
+const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
-const unsigned char CMD_QUANTIZE = 0x22; // ToDo: Input Quantize
+const unsigned char CMD_QUANTIZE = 0x22; // ToDo: Toggle MIDI Input Quantize for selected track enable/disable (#42063/#42064) 
 const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
-const unsigned char CMD_NAV_BANKS = 0x31;
+const unsigned char CMD_NAV_BANKS = 0x31; // ToDo: ExtEdit: Change length of time selection left/right (#40320/#40321 and #40322/#40323)?
 const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Idea: Use this to change time selection length (action 40322/40323)? Or project BPM? Or change length of MIDI item?
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Nudge time selection left/right (#40339/#40340)
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -75,7 +75,7 @@ const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_PLAY_CLIP = 0x60; // Used here to switch Mixer view to the bank containing the currently focused (= selected) track
-const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Use this to enter extEditMode. Other Ideas: Use this to loop play currently selected item (maybe flip with above functionality then)? Or use to record arm selected track (and use Count in for pre-roll)
+const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Use this to enter extEditMode.
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
@@ -120,7 +120,8 @@ static unsigned char volToChar_KkMk2(double volume) {
 	// Direct linear logarithmic conversion to KK Mk2 Meter Scaling.
 	// Contrary to Reaper's Peak Volume Meters the dB interval spacing on KK Mk2 displays is NOT linear.
 	// It is assumed that other NI Keyboards use the same scaling for the meters.
-	// Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
+	// Peak: Midi #127 = +6dB #106 = 0dB, #68 = -12dB, #38 = -24dB, #16 = -48dB, #2 = -96dB, #1 = -infinite
+	// VolMarker: Midi #127 = +6dB #109 = 0dB, #68 = -12dB, #38 = -24dB, #12 = -48dB, #2 = -96dB, #0 = -infinite
 	constexpr double minus48dB = 0.00398107170553497250;
 	constexpr double minus96dB = 1.5848931924611134E-05;
 	constexpr double m = (16.0 - 2.0) / (minus48dB - minus96dB);
@@ -602,6 +603,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_PLAY_CLIP:
 				// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
+				// ToDo: Move this into dedicated function and also select the track in Reaper & unselect all other tracks in Reaper
 				this->_bankStart = (int)(g_trackInFocus / BANK_NUM_TRACKS) * BANK_NUM_TRACKS;
 				this->_allMixerUpdate();
 				break;
