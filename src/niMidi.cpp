@@ -903,8 +903,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, dvalue * 0.007874, true), nullptr); 
-		// scaling by dividing by 127 (0.007874)
+		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, dvalue / 126.0, true), nullptr); 
 		// ToDo: non linear behaviour especially in the lower volumes would be preferable. 
 	}
 
@@ -917,17 +916,22 @@ class NiMidiSurface: public BaseSurface {
 		}
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, dvalue * 0.00098425, true), nullptr); 
 		// scaling by dividing by 127*8 (0.00098425)
+		// ToDo: slightly change this?
 	}
 
 	void _onSelTrackVolumeChange(signed char value) {
-		double dvalue = static_cast<double>(value);
+		// Coarse scaling ( value = +/-63): exactly 1dB step per single click
+		// Fine scaling (value = +/- 12): exactly 0.1dB per single click
 		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
 		if (!track) {
 			return;
 		}
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, dvalue * 0.007874, true), nullptr);
-		// ToDo: Consider different scaling than with KnobVolumeChange. Preferably exactly 1dB step per single click.
-		// ToDo: non linear behaviour especially in the lower volumes would be preferable. 
+		if (value >=0 ) {
+			CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value > 38 ? 1.0 : 0.1, true), nullptr);
+		}
+		else {
+			CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value < -38 ? -1.0 : -0.1, true), nullptr);
+		}
 	}
 
 	void _onSelTrackPanChange(signed char value) {
