@@ -559,7 +559,9 @@ class NiMidiSurface: public BaseSurface {
 				Main_OnCommand(40030, 0); // Edit: Redo
 				break;
 			case CMD_QUANTIZE:
-				this->_onQuantize();
+				// this->_onQuantize();
+				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
+				Main_OnCommand(40604, 0); // Open window showing track record settings
 				break;
 			case CMD_AUTO:
 				this->_onSelAutoToggle();
@@ -1002,6 +1004,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	/*
 	bool _isSelTrackInputQuantize() {
 		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
 		if (!track) {
@@ -1016,16 +1019,15 @@ class NiMidiSurface: public BaseSurface {
 		rppxml[513] = '\0';
 		int size = 512;
 		GetTrackStateChunk(track, rppxml, size, false);
-		/* rppxml contains keyword "INQ" for InputQuantize followed by numbers separated by spaces. Encoding:
-		enabled = t[1],
-		grid = t[4],
-		positioning = t[2], -- 0 nearest - 1 previous 1 next
-		quantize_NoteOffs = t[3],
-		strength = t[5],
-		swing = t[6],
-		quantize_within1 = t[7],
-		quantize_within2 = t[8]
-		*/
+		// rppxml contains keyword "INQ" for InputQuantize followed by numbers separated by spaces. Encoding:
+		// enabled = t[1],
+		// grid = t[4],
+		// positioning = t[2], -- 0 nearest - 1 previous 1 next
+		// quantize_NoteOffs = t[3],
+		// strength = t[5],
+		// swing = t[6],
+		// quantize_within1 = t[7],
+		// quantize_within2 = t[8]
 		char *pos = strstr(rppxml, "INQ ");
 		ptrdiff_t index = pos - rppxml;
 		index += 4;
@@ -1057,6 +1059,7 @@ class NiMidiSurface: public BaseSurface {
 			Main_OnCommand(40604, 0); // open window showing track record settings
 		}
 	}
+	*/
 
 	void* GetConfigVar(const char* cVar) { // Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
 		int sztmp;
