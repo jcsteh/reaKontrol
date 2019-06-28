@@ -31,7 +31,7 @@ const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for selected track (#9)
-const unsigned char CMD_COUNT = 0x13; // ToDo: Togggle pre-roll for recording (#41819). How to indicate this? Maybe automatically open the metronome and pre roll settings window (#40363)?
+const unsigned char CMD_COUNT = 0x13; // ToDo: Togggle pre-roll for recording (#41819). How to indicate this? Maybe automatically open the metronome and pre roll settings window (#40363)? // Q: Can we close these windows by e.g. SetCursorContext()?
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ToDo: ExtEdit: Remove Selected Track (#40005)
 const unsigned char CMD_LOOP = 0x16;
@@ -39,7 +39,7 @@ const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
-const unsigned char CMD_QUANTIZE = 0x22; // ToDo: Toggle MIDI Input Quantize for selected track enable/disable (#42063/#42064) 
+const unsigned char CMD_QUANTIZE = 0x22;
 const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
 const unsigned char CMD_NAV_BANKS = 0x31; // ToDo: ExtEdit: Change length of time selection left/right (#40320/#40321 and #40322/#40323)?
@@ -168,6 +168,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_UNDO, 1);
 		this->_sendCc(CMD_REDO, 1);
 		this->_sendCc(CMD_CLEAR, 1);
+		this->_sendCc(CMD_QUANTIZE, 1);
 	}
 
 	virtual ~NiMidiSurface() {
@@ -556,6 +557,11 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_QUANTIZE:
+				// this->_onQuantize();
+				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
+				Main_OnCommand(40604, 0); // Open window showing track record settings
 				break;
 			case CMD_AUTO:
 				this->_onSelAutoToggle();
@@ -997,6 +1003,63 @@ class NiMidiSurface: public BaseSurface {
 			GetSetMediaTrackInfo(track, "I_AUTOMODE", &autoMode);
 		}
 	}
+
+	/*
+	bool _isSelTrackInputQuantize() {
+		MediaTrack* track = CSurf_TrackFromID(g_trackInFocus, false);
+		if (!track) {
+			return false;
+		}
+		// ToDo:
+		// Note: the below code is wasteful in terms of resource usage (memory and CPU). This is ok as long as we do not
+		// poll for InputQuantize state frequently, i.e. just on button push. If this changes in the future the code
+		// can be improved in many ways (e.g. reducing the search to start at position (200 + [track name length]) which is the
+		// approximate position in rppXML for INQ). Also avoids the misinterpretation of a track name containing "INQ "...
+		char rppxml[514];
+		rppxml[513] = '\0';
+		int size = 512;
+		GetTrackStateChunk(track, rppxml, size, false);
+		// rppxml contains keyword "INQ" for InputQuantize followed by numbers separated by spaces. Encoding:
+		// enabled = t[1],
+		// grid = t[4],
+		// positioning = t[2], -- 0 nearest - 1 previous 1 next
+		// quantize_NoteOffs = t[3],
+		// strength = t[5],
+		// swing = t[6],
+		// quantize_within1 = t[7],
+		// quantize_within2 = t[8]
+		char *pos = strstr(rppxml, "INQ ");
+		ptrdiff_t index = pos - rppxml;
+		index += 4;
+		if (rppxml[index] == '1') {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+	void _onQuantize() {
+		// Toggle MIDI Input Quantize for selected track enable / disable(#42063 / #42064)
+		
+		// ToDo: How to indicate quantize state on keyboard?? Maybe flash the button?
+		// Polling quantize state could be done in SetSurfaceSelected() for the currently selected track
+		
+		// ToDo: Can we close these windows by e.g. SetCursorContext(), or smth w DockWindowRemove, DockWindowRefresh...? Could be triggered when receiving any other MIDI CC command...
+		// changing cursor/mouse context could be quite annoying if triggered from GUI -> only consider for MIDI CCs...
+		// If this works consider settings cursor context back to what is was, i.e. first store GetCursorContext()
+		// or checkout SWS Focus main window _S&M_WINMAIN code...
+
+		if (_isSelTrackInputQuantize()) {
+			Main_OnCommand(42064, 0); // disable input quantize for selected track
+			Main_OnCommand(40604, 0); // open window showing track record settings
+		}
+		else {
+			Main_OnCommand(42063, 0); // disable input quantize for selected track
+			Main_OnCommand(40604, 0); // open window showing track record settings
+		}
+	}
+	*/
 
 	void* GetConfigVar(const char* cVar) { // Copyright (c) 2010 and later Tim Payne (SWS), Jeffos
 		int sztmp;
