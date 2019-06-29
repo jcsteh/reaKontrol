@@ -31,7 +31,7 @@ const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for selected track (#9)
-const unsigned char CMD_COUNT = 0x13; // ToDo: Togggle pre-roll for recording (#41819). How to indicate this? Maybe automatically open the metronome and pre roll settings window (#40363)? // Q: Can we close these windows by e.g. SetCursorContext()?
+const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ToDo: ExtEdit: Remove Selected Track (#40005)
 const unsigned char CMD_LOOP = 0x16;
@@ -202,10 +202,12 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else {
 			this->_sendCc(CMD_REC, 0);
+			this->_disableRecCountIn(); // disable count-in for recording
 		}
 		if (pause) {
 			this->_sendCc(CMD_PLAY, 1);
 			this->_sendCc(CMD_STOP, 1); // since there is no Pause button on KK we indicate it with both Play and Stop lit
+			this->_disableRecCountIn(); // disable count-in for recording
 		}
 		else if (play) {
 			this->_sendCc(CMD_PLAY, 1);
@@ -214,6 +216,7 @@ class NiMidiSurface: public BaseSurface {
 		else {
 			this->_sendCc(CMD_PLAY, 0);
 			this->_sendCc(CMD_STOP, 1);
+			this->_disableRecCountIn(); // disable count-in for recording
 		}
 	}
 		
@@ -531,17 +534,25 @@ class NiMidiSurface: public BaseSurface {
 				CSurf_GoStart();
 				if (GetPlayState() & ~1) {
 					// Only play if current state is not playing
+					// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
 					CSurf_OnPlay();
 				}
 				break;
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
+			case CMD_COUNT:
+				Main_OnCommand(41745, 0); // Enable the metronome
+				this->_enableRecCountIn(); // Enable count-in for recording
+				CSurf_OnRecord();
+				break;
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
 			case CMD_CLEAR:
-				Main_OnCommand(40006, 0); // Edit: Remove selected item
+				// Delete active takes. Typically, when recording an item in loop mode this allows to remove take by take until the entire item is removed.
+				Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
+				Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
 				break;
 			case CMD_LOOP:
 				Main_OnCommand(1068, 0); // Transport: Toggle repeat
@@ -559,9 +570,10 @@ class NiMidiSurface: public BaseSurface {
 				Main_OnCommand(40030, 0); // Edit: Redo
 				break;
 			case CMD_QUANTIZE:
-				// this->_onQuantize();
 				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
 				Main_OnCommand(40604, 0); // Open window showing track record settings
+				// ToDo: Can we close the windows by e.g. SetCursorContext()?
+				// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
 				break;
 			case CMD_AUTO:
 				this->_onSelAutoToggle();
@@ -1048,7 +1060,7 @@ class NiMidiSurface: public BaseSurface {
 		// ToDo: Can we close these windows by e.g. SetCursorContext(), or smth w DockWindowRemove, DockWindowRefresh...? Could be triggered when receiving any other MIDI CC command...
 		// changing cursor/mouse context could be quite annoying if triggered from GUI -> only consider for MIDI CCs...
 		// If this works consider settings cursor context back to what is was, i.e. first store GetCursorContext()
-		// or checkout SWS Focus main window _S&M_WINMAIN code...
+		// or checkout SWS Focus main window _S&M_WINMAIN ...
 
 		if (_isSelTrackInputQuantize()) {
 			Main_OnCommand(42064, 0); // disable input quantize for selected track
@@ -1078,6 +1090,14 @@ class NiMidiSurface: public BaseSurface {
 	void _metronomeUpdate() {
 		// Actively poll the metronome status on project tab changes
 		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
+	}
+
+	void _enableRecCountIn() {
+		*(int*)GetConfigVar("projmetroen") |= 16; 
+	}
+
+	void _disableRecCountIn() {
+		*(int*)GetConfigVar("projmetroen") &= ~16;
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
