@@ -1,4 +1,4 @@
-![alt text](ReaKontrol_v092_img.jpg?raw=true)
+![alt text](ReaKontrol_v093pp.png?raw=true)
 
 # ReaKontrol
 - Fork of the excellent ReaKontrol repository published by James Teh: https://github.com/jcsteh/reaKontrol
