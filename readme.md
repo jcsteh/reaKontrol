@@ -14,11 +14,14 @@ This fork is mainly a bleeding edge development branch aiming to continuously ad
 - When a critcial amount of functionality has been reached there will be stable releases in a dedicated release branch.
 - Binaries are available for releases (Windows only): https://github.com/brummbrum/reaKontrol/releases
 
+## Manual
+- Can be found under releases: https://github.com/brummbrum/reaKontrol/releases
+
 ## Upstream Integration into Parent Repository
 - New features are also offered to the upstream repository @ https://github.com/jcsteh/reaKontrol
 - Some updated features may or may not be merged with the upstream master due to possibly different priorities
 - The sequence in which new features are published may be different between this fork and the upstream repository due to possibly different priorities
 - The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
 
-## Build instructions and additional description
+## Build instructions
 - Please refer to the parent repository @ https://github.com/jcsteh/reaKontrol
