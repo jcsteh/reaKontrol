@@ -34,7 +34,7 @@ const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for sele
 const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ToDo: ExtEdit: Remove Selected Track (#40005)
-const unsigned char CMD_LOOP = 0x16;
+const unsigned char CMD_LOOP = 0x16; // ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
 const unsigned char CMD_UNDO = 0x20;
@@ -42,11 +42,11 @@ const unsigned char CMD_REDO = 0x21;
 const unsigned char CMD_QUANTIZE = 0x22;
 const unsigned char CMD_AUTO = 0x23;
 const unsigned char CMD_NAV_TRACKS = 0x30;
-const unsigned char CMD_NAV_BANKS = 0x31; // ToDo: ExtEdit: Change length of time selection left/right (#40320/#40321 and #40322/#40323)?
+const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Nudge time selection left/right (#40339/#40340)
+const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Shift time selection left/right (#40037/#40038)
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -595,11 +595,13 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				// ToDo: Scrubbing very slow. Rather than just amplifying this value
-				// have to evaluate incoming MIDI stream to allow for both fine as well
-				// coarse scrubbing
-				// Or move to next beat, bar etc
-				CSurf_ScrubAmt(convertSignedMidiValue(value)); 
+				if (value <= 63) {
+					Main_OnCommand(40647, 0); // move right 1 grid division
+				}
+				else {
+					Main_OnCommand(40646, 0); // move left 1 grid division
+				}
+				// CSurf_ScrubAmt(convertSignedMidiValue(value)); 
 				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
