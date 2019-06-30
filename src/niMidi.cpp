@@ -9,8 +9,8 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-#define DEBUG_DIAGNOSTICS
-#define BASIC_DIAGNOSTICS
+// #define DEBUG_DIAGNOSTICS
+// #define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
@@ -46,7 +46,7 @@ const unsigned char CMD_NAV_BANKS = 0x31;
 const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33; // not used in NIHIA?
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
-const unsigned char CMD_MOVE_LOOP = 0x35; // ToDo: LOOP + 4D Encoder Rotate. Shift time selection left/right (#40037/#40038)
+const unsigned char CMD_MOVE_LOOP = 0x35;
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SET_KK_INSTANCE = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -74,7 +74,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // Refocus bank. ToDo: ExtEdit: Insert track (#40001)
+const unsigned char CMD_PLAY_CLIP = 0x60; // ToDo: ExtEdit: Insert track (#40001)
 const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Enter extEditMode.
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
@@ -596,12 +596,19 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_MOVE_TRANSPORT:
 				if (value <= 63) {
-					Main_OnCommand(40647, 0); // move right 1 grid division
+					Main_OnCommand(40647, 0); // move cursor right 1 grid division (no seek)
 				}
 				else {
-					Main_OnCommand(40646, 0); // move left 1 grid division
+					Main_OnCommand(40646, 0); // move cursor left 1 grid division (no seek)
 				}
-				// CSurf_ScrubAmt(convertSignedMidiValue(value)); 
+				break;
+			case CMD_MOVE_LOOP:
+				if (value <= 63) {
+					Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
+				}
+				else {
+					Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
+				}
 				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
