@@ -88,8 +88,9 @@ const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // Attention(!): NIHIA 1
 const unsigned char TRTYPE_UNSPEC = 1;
 const unsigned char TRTYPE_MASTER = 6;
 
-// Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
-const bool HIDE_MUTED_BY_SOLO = false;
+const bool HIDE_MUTED_BY_SOLO = false; // Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
+const int FLASH_T = 16; // value devided by 30 -> button light flash interval time in Extended Edit Mode
+const int CYCLE_T = 4; // value devided by 30 -> 4D encoder LED cycle interval time in Extended Edit Mode
 
 #define CSURF_EXT_SETMETRONOME 0x00010002
 
@@ -185,6 +186,46 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual void Run() override {
+		static bool lightOn = false;
+		static int flashTimer = -1;
+		static int cycleTimer = -1;
+		if (g_extEditMode == 0) {
+			if (flashTimer != -1) {
+				// ToDo: restore all button light states
+				flashTimer = -1;
+				cycleTimer = -1;
+				lightOn = false;
+			}
+		}
+		else if (g_extEditMode == 1) {
+			// ToDo: flash all Ext Edit buttons
+			// ----------------- just some TEST CODE -------------
+			flashTimer += 1;
+			if (flashTimer >= FLASH_T) {
+				flashTimer = 0;
+				if (lightOn) {
+					lightOn = false;
+					this->_sendCc(CMD_NAV_TRACKS, 0);
+					this->_sendCc(CMD_NAV_CLIPS, 0);
+				}
+				else {
+					lightOn = true;
+					this->_sendCc(CMD_NAV_TRACKS, 3);
+					this->_sendCc(CMD_NAV_CLIPS, 3);
+				}
+			}
+			// ---------------------------------------------------
+		}
+		else if (g_extEditMode == 2) {
+			// ToDo: restore all button light states
+			// ToDo: flash LOOP button
+			// ToDo: cycle 4D Encoder LEDs
+		}
+		else if (g_extEditMode == 3) {
+			// ToDo: restore all button light states
+			// ToDo: flash TEMPO button
+			// ToDo: cycle 4D Encoder LEDs
+		}
 		// Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
 		this->_peakMixerUpdate();
 		// --------------------------------------------------------------------------------
