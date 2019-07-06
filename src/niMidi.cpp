@@ -9,8 +9,8 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-// #define DEBUG_DIAGNOSTICS
-// #define BASIC_DIAGNOSTICS
+#define DEBUG_DIAGNOSTICS
+#define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
@@ -30,10 +30,10 @@ const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
-const unsigned char CMD_REC = 0x12; // ToDo: ExtEdit: Toggle record arm for selected track (#9)
+const unsigned char CMD_REC = 0x12; // ExtEdit: Toggle record arm for selected track
 const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
-const unsigned char CMD_CLEAR = 0x15; // ToDo: ExtEdit: Remove Selected Track (#40005)
+const unsigned char CMD_CLEAR = 0x15; // ExtEdit: Remove Selected Track
 const unsigned char CMD_LOOP = 0x16; // ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
@@ -74,8 +74,8 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
-const unsigned char CMD_PLAY_CLIP = 0x60; // ToDo: ExtEdit: Insert track (#40001)
-const unsigned char CMD_STOP_CLIP = 0x61; // ToDo: SHIFT + 4D Encoder Push. Enter extEditMode.
+const unsigned char CMD_PLAY_CLIP = 0x60; // ExtEdit: Insert track
+const unsigned char CMD_STOP_CLIP = 0x61; // Enter extEditMode
 const unsigned char CMD_PLAY_SCENE = 0x62; // not used in NIHIA?
 const unsigned char CMD_RECORD_SESSION = 0x63; // not used in NIHIA?
 const unsigned char CMD_CHANGE_SEL_TRACK_VOLUME = 0x64;
@@ -99,6 +99,7 @@ static int g_trackInFocus = -1;
 static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
+static int g_extEditMode = 0; // 0 = no Extended Edit, 1 = Extended Edit 1st stage, 2 = Extended Edit LOOP, 3 = Extended Edit TEMPO
 
 signed char convertSignedMidiValue(unsigned char value) {
 	// Convert a signed 7 bit MIDI value to a signed char.
@@ -518,11 +519,13 @@ class NiMidiSurface: public BaseSurface {
 			<< g_trackInFocus << " Bank Start "
 			<< this->_bankStart << " Bank End "
 			<< this->_bankEnd << " anySolo "
-			<< g_anySolo << endl;
+			<< g_anySolo << " extEditMode "
+			<< g_extEditMode << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
-
-		switch (command) {
+		if (g_extEditMode == 0) {
+			// Normal Keyboard Mode
+			switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
@@ -581,18 +584,18 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
 				this->_onTrackNav(convertSignedMidiValue(value));
-				break;			
+				break;
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
 				this->_onBankSelect(convertSignedMidiValue(value));
-				break; 
+				break;
 			case CMD_NAV_CLIPS:
 				// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
 				// Value is -1 or 1.
 				Main_OnCommand(value == 1 ?
 					40173 : // Markers: Go to next marker/project end
 					40172, // Markers: Go to previous marker/project start
-				0);
+					0);
 				break;
 			case CMD_MOVE_TRANSPORT:
 				if (value <= 63) {
@@ -629,7 +632,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME4:
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:			
+			case CMD_KNOB_VOLUME7:
 				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
 				break;
 			case CMD_KNOB_PAN0:
@@ -639,12 +642,16 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN4:
 			case CMD_KNOB_PAN5:
 			case CMD_KNOB_PAN6:
-			case CMD_KNOB_PAN7:			
+			case CMD_KNOB_PAN7:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			case CMD_PLAY_CLIP:
 				// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
 				_onRefocusBank();
+				break;
+			case CMD_STOP_CLIP:
+				// Enter Extended Edit Mode
+				g_extEditMode = 1;
 				break;
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
@@ -668,6 +675,180 @@ class NiMidiSurface: public BaseSurface {
 				ShowConsoleMsg(s.str().c_str());
 #endif
 				break;
+			}
+		} 
+		else {
+			// Extended Edit Mode: We duplicate all commands here from Normal Mode to have more fine control over future behavior
+			switch (command) {
+			case CMD_HELLO:
+				this->_protocolVersion = value;
+				break;
+			case CMD_PLAY:
+				// Toggles between play and pause
+				CSurf_OnPlay();
+				g_extEditMode = 0;
+				break;
+			case CMD_RESTART:
+				CSurf_GoStart();
+				if (GetPlayState() & ~1) {
+					// Only play if current state is not playing
+					// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
+					CSurf_OnPlay();
+				}
+				g_extEditMode = 0;
+				break;
+			case CMD_REC:
+				// ExtEdit: Toggle record arm for selected track
+				Main_OnCommand(9, 0); // Toggle record arm for selected track
+				g_extEditMode = 0;
+				break;
+			case CMD_COUNT:
+				Main_OnCommand(41745, 0); // Enable the metronome
+				this->_enableRecCountIn(); // Enable count-in for recording
+				CSurf_OnRecord();
+				g_extEditMode = 0;
+				break;
+			case CMD_STOP:
+				CSurf_OnStop();
+				g_extEditMode = 0;
+				break;
+			case CMD_CLEAR:
+				// ExtEdit: Remove Selected Track
+				Main_OnCommand(40005, 0); // Remove Selected Track
+				SetTrackListChange();
+				g_extEditMode = 0;
+				break;
+			case CMD_LOOP:
+				// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
+				g_extEditMode = 2;
+				break;
+			case CMD_METRO:
+				Main_OnCommand(40364, 0); // Options: Toggle metronome
+				g_extEditMode = 0;
+				break;
+			case CMD_TEMPO:
+				// ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+				g_extEditMode = 3;
+				break;
+			case CMD_UNDO:
+				Main_OnCommand(40029, 0); // Edit: Undo
+				// ToDo: Consider also exiting Extended Edit
+				break;
+			case CMD_REDO:
+				Main_OnCommand(40030, 0); // Edit: Redo
+				// ToDo: Consider also exiting Extended Edit
+				break;
+			case CMD_QUANTIZE:
+				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
+				Main_OnCommand(40604, 0); // Open window showing track record settings
+				// ToDo: Can we close the windows by e.g. SetCursorContext()?
+				// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
+				g_extEditMode = 0;
+				break;
+			case CMD_AUTO:
+				this->_onSelAutoToggle();
+				g_extEditMode = 0;
+				break;
+			case CMD_NAV_TRACKS:
+				// Value is -1 or 1.
+				this->_onTrackNav(convertSignedMidiValue(value));
+				break;
+			case CMD_NAV_BANKS:
+				// Value is -1 or 1.
+				this->_onBankSelect(convertSignedMidiValue(value));
+				break;
+			case CMD_NAV_CLIPS:
+				// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
+				// Value is -1 or 1.
+				Main_OnCommand(value == 1 ?
+					40173 : // Markers: Go to next marker/project end
+					40172, // Markers: Go to previous marker/project start
+					0);
+				break;
+			/*
+			case CMD_MOVE_TRANSPORT:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			case CMD_CHANGE_SEL_TRACK_VOLUME:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			case CMD_CHANGE_SEL_TRACK_PAN:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			*/
+			case CMD_MOVE_LOOP:
+				if (value <= 63) {
+					Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
+				}
+				else {
+					Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
+				}
+				break;
+			case CMD_TRACK_SELECTED:
+				// Select a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSelect(value);
+				break;
+			case CMD_TRACK_MUTED:
+				// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackMute(value);
+				g_extEditMode = 0;
+				break;
+			case CMD_TRACK_SOLOED:
+				// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+				this->_onTrackSolo(value);
+				g_extEditMode = 0;
+				break;
+			case CMD_KNOB_VOLUME0:
+			case CMD_KNOB_VOLUME1:
+			case CMD_KNOB_VOLUME2:
+			case CMD_KNOB_VOLUME3:
+			case CMD_KNOB_VOLUME4:
+			case CMD_KNOB_VOLUME5:
+			case CMD_KNOB_VOLUME6:
+			case CMD_KNOB_VOLUME7:
+				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+				g_extEditMode = 0;
+				break;
+			case CMD_KNOB_PAN0:
+			case CMD_KNOB_PAN1:
+			case CMD_KNOB_PAN2:
+			case CMD_KNOB_PAN3:
+			case CMD_KNOB_PAN4:
+			case CMD_KNOB_PAN5:
+			case CMD_KNOB_PAN6:
+			case CMD_KNOB_PAN7:
+				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				g_extEditMode = 0;
+				break;
+			case CMD_PLAY_CLIP:
+				// ExtEdit: Insert track
+				Main_OnCommand(40001, 0); // Insert Track
+				SetTrackListChange();
+				g_extEditMode = 0;
+				break;
+			case CMD_STOP_CLIP:
+				// Exit Extended Edit Mode
+				g_extEditMode = 0;
+				break;
+			case CMD_TOGGLE_SEL_TRACK_MUTE:
+				this->_onSelTrackMute();
+				g_extEditMode = 0;
+				break;
+			case CMD_TOGGLE_SEL_TRACK_SOLO:
+				this->_onSelTrackSolo();
+				g_extEditMode = 0;
+				break;
+			default:
+#ifdef BASIC_DIAGNOSTICS
+				ostringstream s;
+				s << "Unhandled MIDI message " << showbase << hex
+					<< (int)event->midi_message[0] << " "
+					<< (int)event->midi_message[1] << " "
+					<< (int)event->midi_message[2] << endl;
+				ShowConsoleMsg(s.str().c_str());
+#endif
+				break;
+			}
 		}
 	}
 
