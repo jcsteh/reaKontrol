@@ -35,8 +35,8 @@ const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ExtEdit: Remove Selected Track
 const unsigned char CMD_LOOP = 0x16; // ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-const unsigned char CMD_METRO = 0x17;
-const unsigned char CMD_TEMPO = 0x18; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+const unsigned char CMD_METRO = 0x17; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
 const unsigned char CMD_QUANTIZE = 0x22;
@@ -90,7 +90,7 @@ const unsigned char TRTYPE_MASTER = 6;
 
 const bool HIDE_MUTED_BY_SOLO = false; // Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
 const int FLASH_T = 16; // value devided by 30 -> button light flash interval time in Extended Edit Mode
-const int CYCLE_T = 4; // value devided by 30 -> 4D encoder LED cycle interval time in Extended Edit Mode
+const int CYCLE_T = 8; // value devided by 30 -> 4D encoder LED cycle interval time in Extended Edit Mode
 
 #define CSURF_EXT_SETMETRONOME 0x00010002
 
@@ -189,17 +189,18 @@ class NiMidiSurface: public BaseSurface {
 		static bool lightOn = false;
 		static int flashTimer = -1;
 		static int cycleTimer = -1;
+		static int cyclePos = 0;
 		if (g_extEditMode == 0) {
-			if (flashTimer != -1) {
-				// ToDo: restore all button light states
+			if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
+				this->_extEditButtonUpdate();
+				lightOn = false;
 				flashTimer = -1;
 				cycleTimer = -1;
-				lightOn = false;
+				cyclePos = 0;
 			}
 		}
 		else if (g_extEditMode == 1) {
-			// ToDo: flash all Ext Edit buttons
-			// ----------------- just some TEST CODE -------------
+			// Flash all Ext Edit buttons
 			flashTimer += 1;
 			if (flashTimer >= FLASH_T) {
 				flashTimer = 0;
@@ -207,27 +208,117 @@ class NiMidiSurface: public BaseSurface {
 					lightOn = false;
 					this->_sendCc(CMD_NAV_TRACKS, 0);
 					this->_sendCc(CMD_NAV_CLIPS, 0);
+					this->_sendCc(CMD_REC, 0);
+					this->_sendCc(CMD_CLEAR, 0);
+					this->_sendCc(CMD_LOOP, 0);
+					this->_sendCc(CMD_METRO, 0);
 				}
 				else {
 					lightOn = true;
 					this->_sendCc(CMD_NAV_TRACKS, 3);
 					this->_sendCc(CMD_NAV_CLIPS, 3);
+					this->_sendCc(CMD_REC, 1);
+					this->_sendCc(CMD_CLEAR, 1);
+					this->_sendCc(CMD_LOOP, 1);
+					this->_sendCc(CMD_METRO, 1);
 				}
 			}
-			// ---------------------------------------------------
 		}
 		else if (g_extEditMode == 2) {
-			// ToDo: restore all button light states
-			// ToDo: flash LOOP button
-			// ToDo: cycle 4D Encoder LEDs
+			if (cycleTimer == -1) { 
+				this->_extEditButtonUpdate();
+				this->_sendCc(CMD_NAV_TRACKS, 1);
+				this->_sendCc(CMD_NAV_CLIPS, 0);
+			}
+			// Cycle 4D Encoder LEDs
+			cycleTimer += 1;
+			if (cycleTimer >= CYCLE_T) {
+				cycleTimer = 0;
+				cyclePos += 1;
+				if (cyclePos > 3) {
+					cyclePos = 0;
+				}
+				switch (cyclePos) { // clockwise cycling
+				case 0:
+					this->_sendCc(CMD_NAV_TRACKS, 1);
+					this->_sendCc(CMD_NAV_CLIPS, 0);
+					break;
+				case 1:
+					this->_sendCc(CMD_NAV_TRACKS, 0);
+					this->_sendCc(CMD_NAV_CLIPS, 1);
+					break;
+				case 2:
+					this->_sendCc(CMD_NAV_TRACKS, 2);
+					this->_sendCc(CMD_NAV_CLIPS, 0);
+					break;
+				case 3:
+					this->_sendCc(CMD_NAV_TRACKS, 0);
+					this->_sendCc(CMD_NAV_CLIPS, 2);
+					break;
+				}
+			}
+			// Flash LOOP button
+			flashTimer += 1;
+			if (flashTimer >= FLASH_T) {
+				flashTimer = 0;
+				if (lightOn) {
+					lightOn = false;
+					this->_sendCc(CMD_LOOP, 0);
+				}
+				else {
+					lightOn = true;
+					this->_sendCc(CMD_LOOP, 1);
+				}
+			}
 		}
 		else if (g_extEditMode == 3) {
-			// ToDo: restore all button light states
-			// ToDo: flash TEMPO button
-			// ToDo: cycle 4D Encoder LEDs
+			if (cycleTimer == -1) {
+				this->_extEditButtonUpdate();
+				this->_sendCc(CMD_NAV_TRACKS, 1);
+				this->_sendCc(CMD_NAV_CLIPS, 0);
+			}
+			// Cycle 4D Encoder LEDs
+			cycleTimer += 1;
+			if (cycleTimer >= CYCLE_T) {
+				cycleTimer = 0;
+				cyclePos += 1;
+				if (cyclePos > 3) {
+					cyclePos = 0;
+				}
+				switch (cyclePos) { // counter clockwise cycling
+				case 0:
+					this->_sendCc(CMD_NAV_TRACKS, 1);
+					this->_sendCc(CMD_NAV_CLIPS, 0);
+					break;
+				case 1:
+					this->_sendCc(CMD_NAV_TRACKS, 0);
+					this->_sendCc(CMD_NAV_CLIPS, 2);
+					break;
+				case 2:
+					this->_sendCc(CMD_NAV_TRACKS, 2);
+					this->_sendCc(CMD_NAV_CLIPS, 0);
+					break;
+				case 3:
+					this->_sendCc(CMD_NAV_TRACKS, 0);
+					this->_sendCc(CMD_NAV_CLIPS, 1);
+					break;
+				}
+			}
+			// Flash METRO button
+			flashTimer += 1;
+			if (flashTimer >= FLASH_T) {
+				flashTimer = 0;
+				if (lightOn) {
+					lightOn = false;
+					this->_sendCc(CMD_METRO, 0);
+				}
+				else {
+					lightOn = true;
+					this->_sendCc(CMD_METRO, 1);
+				}
+			}
 		}
-		// Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
-		this->_peakMixerUpdate();
+		this->_peakMixerUpdate(); // Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
 		// --------------------------------------------------------------------------------
 		BaseSurface::Run();
 	}
@@ -719,8 +810,93 @@ class NiMidiSurface: public BaseSurface {
 			}
 		} 
 		else {
-			// Extended Edit Mode: We duplicate all commands here from Normal Mode to have more fine control over future behavior
+		// ==================================================================================================================	
+		// Extended Edit Mode: We duplicate all commands here from Normal Mode to have more fine control over behavior
+		// ==================================================================================================================	
 			switch (command) {
+
+			// EXTENDED EDIT COMMANDS =======================================================================================
+			case CMD_REC:
+				if (g_extEditMode == 1) {
+					// ExtEdit: Toggle record arm for selected track
+					Main_OnCommand(9, 0); // Toggle record arm for selected track
+				}
+				else {
+					CSurf_OnRecord();
+				}
+				g_extEditMode = 0;
+				break;
+			case CMD_CLEAR:
+				if (g_extEditMode == 1) {
+					// ExtEdit: Remove Selected Track
+					Main_OnCommand(40005, 0); // Remove Selected Track
+					SetTrackListChange();
+				}
+				else {
+					// Delete active takes. Typically, when recording an item in loop mode this allows to remove take by take until the entire item is removed.
+					Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
+					Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
+				}
+				g_extEditMode = 0;
+				break;
+			case CMD_LOOP:
+				// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
+				if (g_extEditMode == 1) {
+					g_extEditMode = 2;
+				}
+				else if (g_extEditMode == 2) {
+					g_extEditMode = 0;
+				}
+				else {
+					Main_OnCommand(1068, 0); // Transport: Toggle repeat
+					g_extEditMode = 0;
+				}
+				break;
+			case CMD_METRO:
+				// ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+				if (g_extEditMode == 1) {
+					g_extEditMode = 3;
+				}
+				else if (g_extEditMode == 3) {
+					g_extEditMode = 0;
+				}
+				else {
+					Main_OnCommand(40364, 0); // Options: Toggle metronome
+					g_extEditMode = 0;
+				}
+				break;
+			case CMD_PLAY_CLIP:
+				if (g_extEditMode == 1) {
+					// ExtEdit: Insert track
+					Main_OnCommand(40001, 0); // Insert Track
+					SetTrackListChange();
+				}
+				else {
+					_onRefocusBank();
+				}
+				g_extEditMode = 0;
+				break;
+			case CMD_STOP_CLIP:
+				// Exit Extended Edit Mode
+				g_extEditMode = 0;
+				break;
+
+
+				// ToDo: ExtEdit == 2: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
+				// ToDo: ExtEditMode == 3: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+				/*
+			case CMD_MOVE_TRANSPORT:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			case CMD_CHANGE_SEL_TRACK_VOLUME:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			case CMD_CHANGE_SEL_TRACK_PAN:
+				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				break;
+			*/
+			// ===============================================================================================================
+
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				break;
@@ -738,11 +914,6 @@ class NiMidiSurface: public BaseSurface {
 				}
 				g_extEditMode = 0;
 				break;
-			case CMD_REC:
-				// ExtEdit: Toggle record arm for selected track
-				Main_OnCommand(9, 0); // Toggle record arm for selected track
-				g_extEditMode = 0;
-				break;
 			case CMD_COUNT:
 				Main_OnCommand(41745, 0); // Enable the metronome
 				this->_enableRecCountIn(); // Enable count-in for recording
@@ -753,24 +924,10 @@ class NiMidiSurface: public BaseSurface {
 				CSurf_OnStop();
 				g_extEditMode = 0;
 				break;
-			case CMD_CLEAR:
-				// ExtEdit: Remove Selected Track
-				Main_OnCommand(40005, 0); // Remove Selected Track
-				SetTrackListChange();
-				g_extEditMode = 0;
-				break;
-			case CMD_LOOP:
-				// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-				g_extEditMode = 2;
-				break;
-			case CMD_METRO:
-				Main_OnCommand(40364, 0); // Options: Toggle metronome
-				g_extEditMode = 0;
-				break;
 			case CMD_TEMPO:
-				// ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
-				g_extEditMode = 3;
+				Main_OnCommand(1134, 0); // Transport: Tap tempo
 				break;
+				// ToDo: Consider also exiting Extended Edit
 			case CMD_UNDO:
 				Main_OnCommand(40029, 0); // Edit: Undo
 				// ToDo: Consider also exiting Extended Edit
@@ -806,17 +963,6 @@ class NiMidiSurface: public BaseSurface {
 					40172, // Markers: Go to previous marker/project start
 					0);
 				break;
-			/*
-			case CMD_MOVE_TRANSPORT:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
-				break;
-			case CMD_CHANGE_SEL_TRACK_VOLUME:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
-				break;
-			case CMD_CHANGE_SEL_TRACK_PAN:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
-				break;
-			*/
 			case CMD_MOVE_LOOP:
 				if (value <= 63) {
 					Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
@@ -859,16 +1005,6 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
-				g_extEditMode = 0;
-				break;
-			case CMD_PLAY_CLIP:
-				// ExtEdit: Insert track
-				Main_OnCommand(40001, 0); // Insert Track
-				SetTrackListChange();
-				g_extEditMode = 0;
-				break;
-			case CMD_STOP_CLIP:
-				// Exit Extended Edit Mode
 				g_extEditMode = 0;
 				break;
 			case CMD_TOGGLE_SEL_TRACK_MUTE:
@@ -1060,6 +1196,33 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}
+	}
+
+	void _extEditButtonUpdate() {
+		this->_sendCc(CMD_CLEAR, 1);
+		this->_metronomeUpdate();
+		if (GetPlayState() & 4) {
+			this->_sendCc(CMD_REC, 1);
+		}
+		else {
+			this->_sendCc(CMD_REC, 0);
+		}
+		if (GetSetRepeat(-1)) {
+			this->_sendCc(CMD_LOOP, 1);
+		}
+		else {
+			this->_sendCc(CMD_LOOP, 0);
+		}
+		int numTracks = CSurf_NumTracks(false);
+		int trackNavLights = 3; // left and right on
+		if (g_trackInFocus < 2) {
+			trackNavLights &= 2; // left off
+		}
+		if (g_trackInFocus >= numTracks) {
+			trackNavLights &= 1; // right off
+		}
+		this->_sendCc(CMD_NAV_TRACKS, trackNavLights);
+		this->_sendCc(CMD_NAV_CLIPS, 0); // ToDo: also restore  these lights to correct values
 	}
 
 	void _clearAllSelectedTracks() {
