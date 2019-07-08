@@ -880,21 +880,33 @@ class NiMidiSurface: public BaseSurface {
 				// Exit Extended Edit Mode
 				g_extEditMode = 0;
 				break;
-
-
-				// ToDo: ExtEdit == 2: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-				// ToDo: ExtEditMode == 3: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
-				/*
 			case CMD_MOVE_TRANSPORT:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
-				break;
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
-				break;
 			case CMD_CHANGE_SEL_TRACK_PAN:
-				// ToDo: implement BPM and Loop length change depending on g_extEditMode
+				if (g_extEditMode == 2) {
+					// ToDo: Investigate if time selection manipulation works while playback is running. Currently only possible while stopped or paused
+					if (value <= 63) {
+						Main_OnCommand(40631, 0); // Go to end of time selection
+						Main_OnCommand(40841, 0); // Move edit cursor forward 1 beat (no seek)
+						Main_OnCommand(40626, 0); // Time selection: set end point
+					}
+					else {
+						Main_OnCommand(40631, 0); // Go to end of time selection
+						Main_OnCommand(40842, 0); // Move edit cursor back 1 beat (no seek)
+						Main_OnCommand(40626, 0); // Time selection: set end point
+					}
+				}
+				else if (g_extEditMode == 3) {
+					// ToDo: Consider sending BPM as string to Mixer View
+					if (value <= 63) {
+						Main_OnCommand(41129, 0); // Increase project tempo by 1bpm
+					}
+					else {
+						Main_OnCommand(41130, 0); // Decrease project tempo by 1bpm
+					}
+				}
 				break;
-			*/
+
 			// ===============================================================================================================
 
 			case CMD_HELLO:
