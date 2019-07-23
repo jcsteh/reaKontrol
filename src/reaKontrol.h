@@ -61,6 +61,8 @@
 #define REAPERAPI_WANT_EnumProjects
 #define REAPERAPI_WANT_SetMixerScroll
 #define REAPERAPI_WANT_GetTrackStateChunk
+#define REAPERAPI_WANT_GetCursorPosition
+#define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
 
 
 #include <reaper/reaper_plugin.h>

@@ -35,7 +35,7 @@ const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ExtEdit: Remove Selected Track
 const unsigned char CMD_LOOP = 0x16; // ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-const unsigned char CMD_METRO = 0x17; // ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
+const unsigned char CMD_METRO = 0x17; // ExtEdit: Change project tempo in 1 bpm steps decrease/increase
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
@@ -150,7 +150,7 @@ static unsigned char volToChar_KkMk2(double volume) {
 
 // ==============================================================================================================================
 // ToDo: Callback vs polling Architecture. The approach here is to use a callback architecture when possible and poll only if
-// callbacks are not available, or behave inefficiently or do not report reliably
+// callbacks are not available or behave inefficiently or do not report reliably
 // Some Reaper callbacks (Set....) are called unecessarily (?) often in Reaper, see various forum reports & comments from schwa
 // => Consider state checking statements at beginning of every callback to return immediately if call is not necessary -> save CPU
 // Notably this thread: https://forum.cockos.com/showthread.php?t=49536
@@ -406,7 +406,7 @@ class NiMidiSurface: public BaseSurface {
 		// Using SetSurfaceSelected() rather than OnTrackSelection() or SetTrackTitle():
 		// SetSurfaceSelected() is less economical because it will be called multiple times when something changes (also for unselecting tracks, change of any record arm, change of any auto mode, change of name, ...).
 		// However, SetSurfaceSelected() is the more robust choice because of: https://forum.cockos.com/showpost.php?p=2138446&postcount=15
-		// An good solution for efficiency is to only evaluate messages with (selected == true).
+		// A good solution for efficiency is to only evaluate messages with (selected == true).
 #ifdef CALLBACK_DIAGNOSTICS
 		ostringstream s;
 		s << "CALL: SetSurfaceSelected - Track: " << CSurf_TrackToID(track, false) << " Selected: " << selected << endl;
@@ -853,9 +853,9 @@ class NiMidiSurface: public BaseSurface {
 				}
 				break;
 			case CMD_METRO:
-				// ToDo: ExtEdit: Change project tempo in 1 bpm steps decrease/increase (#41130/#41129)
 				if (g_extEditMode == 1) {
 					g_extEditMode = 3;
+					this->_showTempoInMixer();
 				}
 				else if (g_extEditMode == 3) {
 					g_extEditMode = 0;
@@ -897,13 +897,13 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 				else if (g_extEditMode == 3) {
-					// ToDo: Consider sending BPM as string to Mixer View
 					if (value <= 63) {
 						Main_OnCommand(41129, 0); // Increase project tempo by 1bpm
 					}
 					else {
 						Main_OnCommand(41130, 0); // Decrease project tempo by 1bpm
 					}
+					this->_showTempoInMixer();
 				}
 				break;
 
@@ -1235,6 +1235,20 @@ class NiMidiSurface: public BaseSurface {
 		}
 		this->_sendCc(CMD_NAV_TRACKS, trackNavLights);
 		this->_sendCc(CMD_NAV_CLIPS, 0); // ToDo: also restore  these lights to correct values
+	}
+
+	void _showTempoInMixer() {
+		// Show BPM at Reaper's current edit cursor position in KK Mixer View
+		double time = GetCursorPosition();
+		int timesig_numOut = 0;
+		int timesig_denomOut = 0;
+		double tempoOut = 0;
+		TimeMap_GetTimeSigAtTime(nullptr, time, &timesig_numOut, &timesig_denomOut, &tempoOut);
+		std::string s = std::to_string((int)(tempoOut + 0.5)) + " BPM";
+		std::vector<char> bpmText(s.begin(), s.end()); // memory safe conversion to C style char
+		bpmText.push_back('\0');
+		char* name = &bpmText[0];
+		this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, 0, name);
 	}
 
 	void _clearAllSelectedTracks() {
