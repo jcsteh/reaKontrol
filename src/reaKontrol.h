@@ -62,8 +62,9 @@
 #define REAPERAPI_WANT_SetMixerScroll
 #define REAPERAPI_WANT_GetTrackStateChunk
 #define REAPERAPI_WANT_GetCursorPosition
+#define REAPERAPI_WANT_SetEditCurPos
 #define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
-
+#define REAPERAPI_WANT_GetSet_LoopTimeRange
 
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>

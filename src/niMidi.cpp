@@ -9,8 +9,8 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-#define DEBUG_DIAGNOSTICS
-#define BASIC_DIAGNOSTICS
+// #define DEBUG_DIAGNOSTICS
+// #define BASIC_DIAGNOSTICS
 
 #include <string>
 #include <sstream>
@@ -34,7 +34,7 @@ const unsigned char CMD_REC = 0x12; // ExtEdit: Toggle record arm for selected t
 const unsigned char CMD_COUNT = 0x13;
 const unsigned char CMD_STOP = 0x14;
 const unsigned char CMD_CLEAR = 0x15; // ExtEdit: Remove Selected Track
-const unsigned char CMD_LOOP = 0x16; // ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
+const unsigned char CMD_LOOP = 0x16; // ExtEdit: Change right edge of time selection +/- 1 beat length
 const unsigned char CMD_METRO = 0x17; // ExtEdit: Change project tempo in 1 bpm steps decrease/increase
 const unsigned char CMD_TEMPO = 0x18;
 const unsigned char CMD_UNDO = 0x20;
@@ -884,17 +884,20 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 			case CMD_CHANGE_SEL_TRACK_PAN:
 				if (g_extEditMode == 2) {
-					// ToDo: Investigate if time selection manipulation works while playback is running. Currently only possible while stopped or paused
+					double initCursorPos = GetCursorPosition();
+					double startLoop;
+					double endLoop;
+					GetSet_LoopTimeRange(false, true, &startLoop, &endLoop, false); // get looping section start and end points
+					SetEditCurPos(endLoop, false, false);
 					if (value <= 63) {
-						Main_OnCommand(40631, 0); // Go to end of time selection
 						Main_OnCommand(40841, 0); // Move edit cursor forward 1 beat (no seek)
-						Main_OnCommand(40626, 0); // Time selection: set end point
 					}
 					else {
-						Main_OnCommand(40631, 0); // Go to end of time selection
 						Main_OnCommand(40842, 0); // Move edit cursor back 1 beat (no seek)
-						Main_OnCommand(40626, 0); // Time selection: set end point
 					}
+					endLoop = GetCursorPosition();
+					GetSet_LoopTimeRange(true, true, &startLoop, &endLoop, false); // set looping section start and end points
+					SetEditCurPos(initCursorPos, false, false);
 				}
 				else if (g_extEditMode == 3) {
 					if (value <= 63) {
