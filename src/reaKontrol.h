@@ -49,6 +49,7 @@
 #define REAPERAPI_WANT_CSurf_OnMuteChange
 #define REAPERAPI_WANT_CSurf_OnSoloChange
 #define REAPERAPI_WANT_GetPlayState
+#define REAPERAPI_WANT_GetSetRepeat
 #define REAPERAPI_WANT_GetGlobalAutomationOverride
 #define REAPERAPI_WANT_SetGlobalAutomationOverride
 #define REAPERAPI_WANT_Track_GetPeakInfo
@@ -60,7 +61,10 @@
 #define REAPERAPI_WANT_EnumProjects
 #define REAPERAPI_WANT_SetMixerScroll
 #define REAPERAPI_WANT_GetTrackStateChunk
-
+#define REAPERAPI_WANT_GetCursorPosition
+#define REAPERAPI_WANT_SetEditCurPos
+#define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
+#define REAPERAPI_WANT_GetSet_LoopTimeRange
 
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
