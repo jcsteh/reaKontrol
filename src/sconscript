@@ -10,7 +10,6 @@ env.Append(CPPPATH="#include")
 sources = [
 	"main.cpp",
 	"niMidi.cpp",
-	"mcu.cpp",
 ]
 libs = ["winmm", "SetupAPI"]
 

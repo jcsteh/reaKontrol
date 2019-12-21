@@ -88,4 +88,4 @@ class BaseSurface: public IReaperControlSurface {
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
-IReaperControlSurface* createMcuSurface(int inDev, int outDev);
+
