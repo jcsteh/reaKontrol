@@ -65,6 +65,8 @@
 #define REAPERAPI_WANT_SetEditCurPos
 #define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
 #define REAPERAPI_WANT_GetSet_LoopTimeRange
+#define REAPERAPI_WANT_Help_Set
+#define REAPERAPI_WANT_ShowMessageBox
 
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>

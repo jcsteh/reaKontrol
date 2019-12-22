@@ -101,6 +101,7 @@ static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
 static int g_extEditMode = 0; // 0 = no Extended Edit, 1 = Extended Edit 1st stage, 2 = Extended Edit LOOP, 3 = Extended Edit TEMPO
+static int g_connectedState = 0; // 0 = not connected, 1 = KK MIDI device found, 2 = KK HELLO acknowledged / fully connected
 
 signed char convertSignedMidiValue(unsigned char value) {
 	// Convert a signed 7 bit MIDI value to a signed char.
@@ -175,6 +176,8 @@ class NiMidiSurface: public BaseSurface {
 
 	virtual ~NiMidiSurface() {
 		this->_sendCc(CMD_GOODBYE, 0);
+		this->_protocolVersion = 0;
+		g_connectedState = 0;
 	}
 
 	virtual const char* GetTypeString() override {
@@ -660,6 +663,11 @@ class NiMidiSurface: public BaseSurface {
 			switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
+				if (value > 0) {
+					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
+					Help_Set("ReaKontrol: KK-Keyboard connected", true);
+					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
+				}
 				break;
 			case CMD_PLAY:
 				// Toggles between play and pause
@@ -910,10 +918,15 @@ class NiMidiSurface: public BaseSurface {
 				}
 				break;
 
-			// ===============================================================================================================
+			// Copied Commands fron Normal Mode ================================================================================
 
 			case CMD_HELLO:
 				this->_protocolVersion = value;
+				if (value > 0) {
+					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
+					Help_Set("ReaKontrol: KK-Keyboard connected", true);
+					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
+				}
 				break;
 			case CMD_PLAY:
 				// Toggles between play and pause
