@@ -91,17 +91,6 @@ BaseSurface::BaseSurface() {
 	// ToDo: ???
 }
 
-
-/*
-BaseSurface::BaseSurface(int inDev, int outDev) {
-	this->_midiIn = CreateMIDIInput(inDev);
-	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
-	if (this->_midiOut) {
-		this->_midiIn->start();
-	}
-}
-*/
-
 BaseSurface::~BaseSurface() {
 	if (this->_midiIn)  {
 		this->_midiIn->stop();

@@ -262,7 +262,7 @@ class NiMidiSurface: public BaseSurface {
 							this->_midiIn->start();
 							BaseSurface::Run();
 							g_connectedState = 1;
-							scanTimer = SCAN_T - 30; // Wait 1 second to give NIHIA more time to respond
+							scanTimer = SCAN_T - 15; // Wait 0.5 seconds to give NIHIA more time to respond
 						}
 					}
 				}
@@ -283,13 +283,9 @@ class NiMidiSurface: public BaseSurface {
 				if (connectCount < CONNECT_N) {
 					connectCount += 1;
 					this->_sendCc(CMD_HELLO, 0);
-					this->_sendCc(CMD_UNDO, 1);
-					this->_sendCc(CMD_REDO, 1);
-					this->_sendCc(CMD_CLEAR, 1);
-					this->_sendCc(CMD_QUANTIZE, 1);
 				}
 				else {
-					ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Try to restart NI services: 1. Close Reaper, 2. Turn off keyboard, 3. Restart NIHardwareService and NIHostIntegrationAgent (Task Manager->Services), 4. Turn on keyboard and wait 5 seconds, 5. Start Reaper.", "ReaKontrol", 0);
+					ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Try to restart NI services (NIHostIntegrationAgent, see manual).", "ReaKontrol", 0);
 					if (this->_midiIn) {
 						this->_midiIn->stop();
 						delete this->_midiIn;
@@ -297,7 +293,8 @@ class NiMidiSurface: public BaseSurface {
 					if (this->_midiOut) {
 						delete this->_midiOut;
 					}
-					g_connectedState = -1;
+					connectCount = 0;
+					g_connectedState = 0; // Re-Scan
 				}
 			}
 		}
@@ -777,6 +774,10 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				if (value > 0) {
 					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
+					this->_sendCc(CMD_UNDO, 1);
+					this->_sendCc(CMD_REDO, 1);
+					this->_sendCc(CMD_CLEAR, 1);
+					this->_sendCc(CMD_QUANTIZE, 1);
 					this->_allMixerUpdate();
 					Help_Set("ReaKontrol: KK-Keyboard connected", false);
 #ifdef CONNECTION_DIAGNOSTICS
@@ -1039,6 +1040,10 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				if (value > 0) {
 					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
+					this->_sendCc(CMD_UNDO, 1);
+					this->_sendCc(CMD_REDO, 1);
+					this->_sendCc(CMD_CLEAR, 1);
+					this->_sendCc(CMD_QUANTIZE, 1);
 					this->_allMixerUpdate();
 					Help_Set("ReaKontrol: KK-Keyboard connected", false);
 #ifdef CONNECTION_DIAGNOSTICS
