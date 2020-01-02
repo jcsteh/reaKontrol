@@ -76,7 +76,7 @@ const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {
 	public:
-	BaseSurface(int inDev, int outDev);
+	BaseSurface();
 	virtual ~BaseSurface();
 	virtual const char* GetConfigString() override {
 		return "";
@@ -89,5 +89,5 @@ class BaseSurface: public IReaperControlSurface {
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
 };
 
-IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
+IReaperControlSurface* createNiMidiSurface();
 

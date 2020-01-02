@@ -19,11 +19,13 @@
 
 using namespace std;
 
+const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
+
+/*
 const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
 const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
-const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
-const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
 int getKkMidiInput() {
 	int count = GetNumMIDIInputs();
@@ -58,6 +60,7 @@ int getKkMidiOutput() {
 	}
 	return -1;
 }
+*/
 
 const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
@@ -84,6 +87,12 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	return "";
 }
 
+BaseSurface::BaseSurface() {
+	// ToDo: ???
+}
+
+
+/*
 BaseSurface::BaseSurface(int inDev, int outDev) {
 	this->_midiIn = CreateMIDIInput(inDev);
 	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
@@ -91,6 +100,7 @@ BaseSurface::BaseSurface(int inDev, int outDev) {
 		this->_midiIn->start();
 	}
 }
+*/
 
 BaseSurface::~BaseSurface() {
 	if (this->_midiIn)  {
@@ -125,17 +135,11 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 		if (rec->caller_version != REAPER_PLUGIN_VERSION || !rec->GetFunc || REAPERAPI_LoadAPI(rec->GetFunc) != 0) {
 			return 0; // Incompatible.
 		}
-
-		int inDev = getKkMidiInput();
-		if (inDev != -1) {
-			int outDev = getKkMidiOutput();
-			if (outDev != -1) {
-				surface = createNiMidiSurface(inDev, outDev);
-			}
-		}
+		surface = createNiMidiSurface();
 		rec->Register("csurf_inst", (void*)surface);
 		return 1;
-	} else {
+	} 
+	else {
 		// Unload.
 		if (surface) {
 			delete surface;

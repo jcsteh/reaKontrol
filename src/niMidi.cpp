@@ -9,6 +9,7 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
+#define CONNECTION_DIAGNOSTICS
 // #define DEBUG_DIAGNOSTICS
 // #define BASIC_DIAGNOSTICS
 
@@ -91,6 +92,8 @@ const unsigned char TRTYPE_MASTER = 6;
 const bool HIDE_MUTED_BY_SOLO = false; // Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
 const int FLASH_T = 16; // value devided by 30 -> button light flash interval time in Extended Edit Mode
 const int CYCLE_T = 8; // value devided by 30 -> 4D encoder LED cycle interval time in Extended Edit Mode
+const int SCAN_T = 90; // value devided by 30 -> Scan interval time to check for Komplete Kontrol MIDI device plugged in (hot plugging)
+const int CONNECT_N = 2; // number of connection attempts to switch detected keyboard to NiMidi Mode
 
 #define CSURF_EXT_SETMETRONOME 0x00010002
 
@@ -101,7 +104,50 @@ static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
 static int g_extEditMode = 0; // 0 = no Extended Edit, 1 = Extended Edit 1st stage, 2 = Extended Edit LOOP, 3 = Extended Edit TEMPO
-static int g_connectedState = 0; // 0 = not connected, 1 = KK MIDI device found, 2 = KK HELLO acknowledged / fully connected
+static int g_connectedState = 0; // 0 = not connected / scanning, 1 = KK MIDI device found / trying to connect, 2 = KK HELLO acknowledged / fully connected
+
+# ifdef CONNECTION_DIAGNOSTICS
+static int log_scanAttempts = 0;
+static int log_connectAttempts = 0;
+# endif
+
+const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
+const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
+const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
+
+int getKkMidiInput() {
+	int count = GetNumMIDIInputs();
+	for (int dev = 0; dev < count; ++dev) {
+		char name[30];
+		bool present = GetMIDIInputName(dev, name, sizeof(name));
+		if (!present) {
+			continue;
+		}
+		if (strcmp(name, KKS_DEVICE_NAME) == 0
+			|| strcmp(name, KKA_DEVICE_NAME) == 0
+			|| strcmp(name, KKM_DEVICE_NAME) == 0) {
+			return dev;
+		}
+	}
+	return -1;
+}
+
+int getKkMidiOutput() {
+	int count = GetNumMIDIOutputs();
+	for (int dev = 0; dev < count; ++dev) {
+		char name[30];
+		bool present = GetMIDIOutputName(dev, name, sizeof(name));
+		if (!present) {
+			continue;
+		}
+		if (strcmp(name, KKS_DEVICE_NAME) == 0
+			|| strcmp(name, KKA_DEVICE_NAME) == 0
+			|| strcmp(name, KKM_DEVICE_NAME) == 0) {
+			return dev;
+		}
+	}
+	return -1;
+}
 
 signed char convertSignedMidiValue(unsigned char value) {
 	// Convert a signed 7 bit MIDI value to a signed char.
@@ -165,13 +211,9 @@ static unsigned char volToChar_KkMk2(double volume) {
 
 class NiMidiSurface: public BaseSurface {
 	public:
-	NiMidiSurface(int inDev, int outDev)
-	: BaseSurface(inDev, outDev) {
-		this->_sendCc(CMD_HELLO, 0);
-		this->_sendCc(CMD_UNDO, 1);
-		this->_sendCc(CMD_REDO, 1);
-		this->_sendCc(CMD_CLEAR, 1);
-		this->_sendCc(CMD_QUANTIZE, 1);
+	NiMidiSurface()
+	: BaseSurface() {
+		g_connectedState = 0;
 	}
 
 	virtual ~NiMidiSurface() {
@@ -189,141 +231,209 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual void Run() override {
+		static int scanTimer = SCAN_T - 1; // first scan shall happen immediately
+		static int connectCount = 0;
+		static int inDev = -1;
+		static int outDev = -1;
+				
 		static bool lightOn = false;
 		static int flashTimer = -1;
 		static int cycleTimer = -1;
 		static int cyclePos = 0;
-		if (g_extEditMode == 0) {
-			if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
-				this->_extEditButtonUpdate();
-				lightOn = false;
-				flashTimer = -1;
-				cycleTimer = -1;
-				cyclePos = 0;
+
+		if (g_connectedState == 0) {
+			/*----------------- Scan for KK Keyboard -----------------*/
+			scanTimer += 1;
+			if (scanTimer >= SCAN_T) {
+#ifdef CONNECTION_DIAGNOSTICS
+				log_scanAttempts += 1;
+				ostringstream s;
+				s << "Scan # " << log_scanAttempts << endl;
+				ShowConsoleMsg(s.str().c_str());
+#endif
+				scanTimer = 0;
+				inDev = getKkMidiInput();
+				if (inDev != -1) {
+					outDev = getKkMidiOutput();
+					if (outDev != -1) {
+						this->_midiIn = CreateMIDIInput(inDev);
+						this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
+						if (this->_midiOut) {
+							this->_midiIn->start();
+							BaseSurface::Run();
+							g_connectedState = 1;
+							scanTimer = SCAN_T - 30; // Wait 1 second to give NIHIA more time to respond
+						}
+					}
+				}
 			}
 		}
-		else if (g_extEditMode == 1) {
-			// Flash all Ext Edit buttons
-			flashTimer += 1;
-			if (flashTimer >= FLASH_T) {
-				flashTimer = 0;
-				if (lightOn) {
-					lightOn = false;
-					this->_sendCc(CMD_NAV_TRACKS, 0);
-					this->_sendCc(CMD_NAV_CLIPS, 0);
-					this->_sendCc(CMD_REC, 0);
-					this->_sendCc(CMD_CLEAR, 0);
-					this->_sendCc(CMD_LOOP, 0);
-					this->_sendCc(CMD_METRO, 0);
-				}
-				else {
-					lightOn = true;
-					this->_sendCc(CMD_NAV_TRACKS, 3);
-					this->_sendCc(CMD_NAV_CLIPS, 3);
-					this->_sendCc(CMD_REC, 1);
+		else if (g_connectedState == 1) {
+			/*----------------- Try to connect and initialize -----------------*/
+			BaseSurface::Run();
+			scanTimer += 1;
+			if (scanTimer >= SCAN_T) {
+#ifdef CONNECTION_DIAGNOSTICS
+				log_connectAttempts += 1;
+				ostringstream s;
+				s << "Connect # " << log_connectAttempts << endl;
+				ShowConsoleMsg(s.str().c_str());
+#endif
+				scanTimer = 0;
+				if (connectCount < CONNECT_N) {
+					connectCount += 1;
+					this->_sendCc(CMD_HELLO, 0);
+					this->_sendCc(CMD_UNDO, 1);
+					this->_sendCc(CMD_REDO, 1);
 					this->_sendCc(CMD_CLEAR, 1);
-					this->_sendCc(CMD_LOOP, 1);
-					this->_sendCc(CMD_METRO, 1);
-				}
-			}
-		}
-		else if (g_extEditMode == 2) {
-			if (cycleTimer == -1) { 
-				this->_extEditButtonUpdate();
-				this->_sendCc(CMD_NAV_TRACKS, 1);
-				this->_sendCc(CMD_NAV_CLIPS, 0);
-			}
-			// Cycle 4D Encoder LEDs
-			cycleTimer += 1;
-			if (cycleTimer >= CYCLE_T) {
-				cycleTimer = 0;
-				cyclePos += 1;
-				if (cyclePos > 3) {
-					cyclePos = 0;
-				}
-				switch (cyclePos) { // clockwise cycling
-				case 0:
-					this->_sendCc(CMD_NAV_TRACKS, 1);
-					this->_sendCc(CMD_NAV_CLIPS, 0);
-					break;
-				case 1:
-					this->_sendCc(CMD_NAV_TRACKS, 0);
-					this->_sendCc(CMD_NAV_CLIPS, 1);
-					break;
-				case 2:
-					this->_sendCc(CMD_NAV_TRACKS, 2);
-					this->_sendCc(CMD_NAV_CLIPS, 0);
-					break;
-				case 3:
-					this->_sendCc(CMD_NAV_TRACKS, 0);
-					this->_sendCc(CMD_NAV_CLIPS, 2);
-					break;
-				}
-			}
-			// Flash LOOP button
-			flashTimer += 1;
-			if (flashTimer >= FLASH_T) {
-				flashTimer = 0;
-				if (lightOn) {
-					lightOn = false;
-					this->_sendCc(CMD_LOOP, 0);
+					this->_sendCc(CMD_QUANTIZE, 1);
 				}
 				else {
-					lightOn = true;
-					this->_sendCc(CMD_LOOP, 1);
+					ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Try to restart NI services: 1. Close Reaper, 2. Turn off keyboard, 3. Restart NIHardwareService and NIHostIntegrationAgent (Task Manager->Services), 4. Turn on keyboard and wait 5 seconds, 5. Start Reaper.", "ReaKontrol", 0);
+					if (this->_midiIn) {
+						this->_midiIn->stop();
+						delete this->_midiIn;
+					}
+					if (this->_midiOut) {
+						delete this->_midiOut;
+					}
+					g_connectedState = -1;
 				}
 			}
 		}
-		else if (g_extEditMode == 3) {
-			if (cycleTimer == -1) {
-				this->_extEditButtonUpdate();
-				this->_sendCc(CMD_NAV_TRACKS, 1);
-				this->_sendCc(CMD_NAV_CLIPS, 0);
-			}
-			// Cycle 4D Encoder LEDs
-			cycleTimer += 1;
-			if (cycleTimer >= CYCLE_T) {
-				cycleTimer = 0;
-				cyclePos += 1;
-				if (cyclePos > 3) {
+		else if (g_connectedState == 2) {
+			/*----------------- We are successfully connected -----------------*/
+			if (g_extEditMode == 0) {
+				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
+					this->_extEditButtonUpdate();
+					lightOn = false;
+					flashTimer = -1;
+					cycleTimer = -1;
 					cyclePos = 0;
 				}
-				switch (cyclePos) { // counter clockwise cycling
-				case 0:
+			}
+			else if (g_extEditMode == 1) {
+				// Flash all Ext Edit buttons
+				flashTimer += 1;
+				if (flashTimer >= FLASH_T) {
+					flashTimer = 0;
+					if (lightOn) {
+						lightOn = false;
+						this->_sendCc(CMD_NAV_TRACKS, 0);
+						this->_sendCc(CMD_NAV_CLIPS, 0);
+						this->_sendCc(CMD_REC, 0);
+						this->_sendCc(CMD_CLEAR, 0);
+						this->_sendCc(CMD_LOOP, 0);
+						this->_sendCc(CMD_METRO, 0);
+					}
+					else {
+						lightOn = true;
+						this->_sendCc(CMD_NAV_TRACKS, 3);
+						this->_sendCc(CMD_NAV_CLIPS, 3);
+						this->_sendCc(CMD_REC, 1);
+						this->_sendCc(CMD_CLEAR, 1);
+						this->_sendCc(CMD_LOOP, 1);
+						this->_sendCc(CMD_METRO, 1);
+					}
+				}
+			}
+			else if (g_extEditMode == 2) {
+				if (cycleTimer == -1) {
+					this->_extEditButtonUpdate();
 					this->_sendCc(CMD_NAV_TRACKS, 1);
 					this->_sendCc(CMD_NAV_CLIPS, 0);
-					break;
-				case 1:
-					this->_sendCc(CMD_NAV_TRACKS, 0);
-					this->_sendCc(CMD_NAV_CLIPS, 2);
-					break;
-				case 2:
-					this->_sendCc(CMD_NAV_TRACKS, 2);
+				}
+				// Cycle 4D Encoder LEDs
+				cycleTimer += 1;
+				if (cycleTimer >= CYCLE_T) {
+					cycleTimer = 0;
+					cyclePos += 1;
+					if (cyclePos > 3) {
+						cyclePos = 0;
+					}
+					switch (cyclePos) { // clockwise cycling
+					case 0:
+						this->_sendCc(CMD_NAV_TRACKS, 1);
+						this->_sendCc(CMD_NAV_CLIPS, 0);
+						break;
+					case 1:
+						this->_sendCc(CMD_NAV_TRACKS, 0);
+						this->_sendCc(CMD_NAV_CLIPS, 1);
+						break;
+					case 2:
+						this->_sendCc(CMD_NAV_TRACKS, 2);
+						this->_sendCc(CMD_NAV_CLIPS, 0);
+						break;
+					case 3:
+						this->_sendCc(CMD_NAV_TRACKS, 0);
+						this->_sendCc(CMD_NAV_CLIPS, 2);
+						break;
+					}
+				}
+				// Flash LOOP button
+				flashTimer += 1;
+				if (flashTimer >= FLASH_T) {
+					flashTimer = 0;
+					if (lightOn) {
+						lightOn = false;
+						this->_sendCc(CMD_LOOP, 0);
+					}
+					else {
+						lightOn = true;
+						this->_sendCc(CMD_LOOP, 1);
+					}
+				}
+			}
+			else if (g_extEditMode == 3) {
+				if (cycleTimer == -1) {
+					this->_extEditButtonUpdate();
+					this->_sendCc(CMD_NAV_TRACKS, 1);
 					this->_sendCc(CMD_NAV_CLIPS, 0);
-					break;
-				case 3:
-					this->_sendCc(CMD_NAV_TRACKS, 0);
-					this->_sendCc(CMD_NAV_CLIPS, 1);
-					break;
+				}
+				// Cycle 4D Encoder LEDs
+				cycleTimer += 1;
+				if (cycleTimer >= CYCLE_T) {
+					cycleTimer = 0;
+					cyclePos += 1;
+					if (cyclePos > 3) {
+						cyclePos = 0;
+					}
+					switch (cyclePos) { // counter clockwise cycling
+					case 0:
+						this->_sendCc(CMD_NAV_TRACKS, 1);
+						this->_sendCc(CMD_NAV_CLIPS, 0);
+						break;
+					case 1:
+						this->_sendCc(CMD_NAV_TRACKS, 0);
+						this->_sendCc(CMD_NAV_CLIPS, 2);
+						break;
+					case 2:
+						this->_sendCc(CMD_NAV_TRACKS, 2);
+						this->_sendCc(CMD_NAV_CLIPS, 0);
+						break;
+					case 3:
+						this->_sendCc(CMD_NAV_TRACKS, 0);
+						this->_sendCc(CMD_NAV_CLIPS, 1);
+						break;
+					}
+				}
+				// Flash METRO button
+				flashTimer += 1;
+				if (flashTimer >= FLASH_T) {
+					flashTimer = 0;
+					if (lightOn) {
+						lightOn = false;
+						this->_sendCc(CMD_METRO, 0);
+					}
+					else {
+						lightOn = true;
+						this->_sendCc(CMD_METRO, 1);
+					}
 				}
 			}
-			// Flash METRO button
-			flashTimer += 1;
-			if (flashTimer >= FLASH_T) {
-				flashTimer = 0;
-				if (lightOn) {
-					lightOn = false;
-					this->_sendCc(CMD_METRO, 0);
-				}
-				else {
-					lightOn = true;
-					this->_sendCc(CMD_METRO, 1);
-				}
-			}
+			this->_peakMixerUpdate(); // Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
+			BaseSurface::Run();
 		}
-		this->_peakMixerUpdate(); // Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
-		// --------------------------------------------------------------------------------
-		BaseSurface::Run();
 	}
 
 	virtual void SetPlayState(bool play, bool pause, bool rec) override {
@@ -655,7 +765,9 @@ class NiMidiSurface: public BaseSurface {
 			<< this->_bankStart << " Bank End "
 			<< this->_bankEnd << " anySolo "
 			<< g_anySolo << " extEditMode "
-			<< g_extEditMode << endl;
+			<< g_extEditMode << " connectedState"
+			<< g_connectedState <<			
+			endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
 		if (g_extEditMode == 0) {
@@ -665,8 +777,11 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				if (value > 0) {
 					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
-					Help_Set("ReaKontrol: KK-Keyboard connected", true);
+					this->_allMixerUpdate();
+					Help_Set("ReaKontrol: KK-Keyboard connected", false);
+#ifdef CONNECTION_DIAGNOSTICS
 					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
+#endif
 				}
 				break;
 			case CMD_PLAY:
@@ -924,8 +1039,11 @@ class NiMidiSurface: public BaseSurface {
 				this->_protocolVersion = value;
 				if (value > 0) {
 					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
-					Help_Set("ReaKontrol: KK-Keyboard connected", true);
+					this->_allMixerUpdate();
+					Help_Set("ReaKontrol: KK-Keyboard connected", false);
+#ifdef CONNECTION_DIAGNOSTICS
 					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
+#endif
 				}
 				break;
 			case CMD_PLAY:
@@ -1572,6 +1690,6 @@ class NiMidiSurface: public BaseSurface {
 
 };
 
-IReaperControlSurface* createNiMidiSurface(int inDev, int outDev) {
-	return new NiMidiSurface(inDev, outDev);
+IReaperControlSurface* createNiMidiSurface() {
+	return new NiMidiSurface();
 }
