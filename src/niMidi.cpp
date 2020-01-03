@@ -9,7 +9,7 @@
  */
 
 // #define CALLBACK_DIAGNOSTICS
-#define CONNECTION_DIAGNOSTICS
+// #define CONNECTION_DIAGNOSTICS
 // #define DEBUG_DIAGNOSTICS
 // #define BASIC_DIAGNOSTICS
 
@@ -103,9 +103,19 @@ static int g_trackInFocus = -1;
 static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
-static int g_extEditMode = 0; // 0 = no Extended Edit, 1 = Extended Edit 1st stage, 2 = Extended Edit LOOP, 3 = Extended Edit TEMPO
-static int g_connectedState = 0; // 0 = not connected / scanning, 1 = KK MIDI device found / trying to connect, 2 = KK HELLO acknowledged / fully connected
 
+// Extended Edit Control State Variables
+const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode
+const int EXT_EDIT_ON = 1; // Extended Edit 1st stage commands
+const int EXT_EDIT_LOOP = 2; // Extended Edit LOOP
+const int EXT_EDIT_TEMPO = 3; // Extended Edit TEMPO
+static int g_extEditMode = EXT_EDIT_OFF;
+
+// Connection Status State Variables
+const int KK_NOT_CONNECTED = 0; // not connected / scanning
+const int KK_MIDI_FOUND = 1; // KK MIDI device found / trying to connect to NIHIA
+const int KK_NIHIA_CONNECTED = 2; // NIHIA HELLO acknowledged / fully connected
+static int g_connectedState = KK_NOT_CONNECTED; 
 # ifdef CONNECTION_DIAGNOSTICS
 static int log_scanAttempts = 0;
 static int log_connectAttempts = 0;
@@ -213,13 +223,13 @@ class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface()
 	: BaseSurface() {
-		g_connectedState = 0;
+		g_connectedState = KK_NOT_CONNECTED;
 	}
 
 	virtual ~NiMidiSurface() {
 		this->_sendCc(CMD_GOODBYE, 0);
 		this->_protocolVersion = 0;
-		g_connectedState = 0;
+		g_connectedState = KK_NOT_CONNECTED;
 	}
 
 	virtual const char* GetTypeString() override {
@@ -241,7 +251,7 @@ class NiMidiSurface: public BaseSurface {
 		static int cycleTimer = -1;
 		static int cyclePos = 0;
 
-		if (g_connectedState == 0) {
+		if (g_connectedState == KK_NOT_CONNECTED) {
 			/*----------------- Scan for KK Keyboard -----------------*/
 			scanTimer += 1;
 			if (scanTimer >= SCAN_T) {
@@ -261,14 +271,14 @@ class NiMidiSurface: public BaseSurface {
 						if (this->_midiOut) {
 							this->_midiIn->start();
 							BaseSurface::Run();
-							g_connectedState = 1;
+							g_connectedState = KK_MIDI_FOUND;
 							scanTimer = SCAN_T - 15; // Wait 0.5 seconds to give NIHIA more time to respond
 						}
 					}
 				}
 			}
 		}
-		else if (g_connectedState == 1) {
+		else if (g_connectedState == KK_MIDI_FOUND) {
 			/*----------------- Try to connect and initialize -----------------*/
 			BaseSurface::Run();
 			scanTimer += 1;
@@ -285,7 +295,7 @@ class NiMidiSurface: public BaseSurface {
 					this->_sendCc(CMD_HELLO, 0);
 				}
 				else {
-					ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Try to restart NI services (NIHostIntegrationAgent, see manual).", "ReaKontrol", 0);
+					int answer = ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Please restart NI services (NIHostIntegrationAgent), then retry. ", "ReaKontrol", 5);
 					if (this->_midiIn) {
 						this->_midiIn->stop();
 						delete this->_midiIn;
@@ -294,13 +304,18 @@ class NiMidiSurface: public BaseSurface {
 						delete this->_midiOut;
 					}
 					connectCount = 0;
-					g_connectedState = 0; // Re-Scan
+					if (answer == 4) {
+						g_connectedState = KK_NOT_CONNECTED; // Retry -> Re-Scan
+					}
+					else {
+						g_connectedState = -1; // Give up, plugin not doing anything
+					}
 				}
 			}
 		}
-		else if (g_connectedState == 2) {
+		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
-			if (g_extEditMode == 0) {
+			if (g_extEditMode == EXT_EDIT_OFF) {
 				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
 					this->_extEditButtonUpdate();
 					lightOn = false;
@@ -309,7 +324,7 @@ class NiMidiSurface: public BaseSurface {
 					cyclePos = 0;
 				}
 			}
-			else if (g_extEditMode == 1) {
+			else if (g_extEditMode == EXT_EDIT_ON) {
 				// Flash all Ext Edit buttons
 				flashTimer += 1;
 				if (flashTimer >= FLASH_T) {
@@ -334,7 +349,7 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
-			else if (g_extEditMode == 2) {
+			else if (g_extEditMode == EXT_EDIT_LOOP) {
 				if (cycleTimer == -1) {
 					this->_extEditButtonUpdate();
 					this->_sendCc(CMD_NAV_TRACKS, 1);
@@ -381,7 +396,7 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
-			else if (g_extEditMode == 3) {
+			else if (g_extEditMode == EXT_EDIT_TEMPO) {
 				if (cycleTimer == -1) {
 					this->_extEditButtonUpdate();
 					this->_sendCc(CMD_NAV_TRACKS, 1);
@@ -767,18 +782,18 @@ class NiMidiSurface: public BaseSurface {
 			endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
-		if (g_extEditMode == 0) {
+		if (g_extEditMode == EXT_EDIT_OFF) {
 			// Normal Keyboard Mode
 			switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
-				if (value > 0) {
-					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
+				if (value > 0) {					
 					this->_sendCc(CMD_UNDO, 1);
 					this->_sendCc(CMD_REDO, 1);
 					this->_sendCc(CMD_CLEAR, 1);
 					this->_sendCc(CMD_QUANTIZE, 1);
 					this->_allMixerUpdate();
+					g_connectedState = KK_NIHIA_CONNECTED; // HELLO acknowledged = fully connected to keyboard
 					Help_Set("ReaKontrol: KK-Keyboard connected", false);
 #ifdef CONNECTION_DIAGNOSTICS
 					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
@@ -907,7 +922,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_STOP_CLIP:
 				// Enter Extended Edit Mode
-				g_extEditMode = 1;
+				g_extEditMode = EXT_EDIT_ON;
 				break;
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
@@ -941,17 +956,17 @@ class NiMidiSurface: public BaseSurface {
 
 			// EXTENDED EDIT COMMANDS =======================================================================================
 			case CMD_REC:
-				if (g_extEditMode == 1) {
+				if (g_extEditMode == EXT_EDIT_ON) {
 					// ExtEdit: Toggle record arm for selected track
 					Main_OnCommand(9, 0); // Toggle record arm for selected track
 				}
 				else {
 					CSurf_OnRecord();
 				}
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_CLEAR:
-				if (g_extEditMode == 1) {
+				if (g_extEditMode == EXT_EDIT_ON) {
 					// ExtEdit: Remove Selected Track
 					Main_OnCommand(40005, 0); // Remove Selected Track
 					SetTrackListChange();
@@ -961,36 +976,36 @@ class NiMidiSurface: public BaseSurface {
 					Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
 					Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
 				}
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_LOOP:
 				// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-				if (g_extEditMode == 1) {
-					g_extEditMode = 2;
+				if (g_extEditMode == EXT_EDIT_ON) {
+					g_extEditMode = EXT_EDIT_LOOP;
 				}
-				else if (g_extEditMode == 2) {
-					g_extEditMode = 0;
+				else if (g_extEditMode == EXT_EDIT_LOOP) {
+					g_extEditMode = EXT_EDIT_OFF;
 				}
 				else {
 					Main_OnCommand(1068, 0); // Transport: Toggle repeat
-					g_extEditMode = 0;
+					g_extEditMode = EXT_EDIT_OFF;
 				}
 				break;
 			case CMD_METRO:
-				if (g_extEditMode == 1) {
-					g_extEditMode = 3;
+				if (g_extEditMode == EXT_EDIT_ON) {
+					g_extEditMode = EXT_EDIT_TEMPO;
 					this->_showTempoInMixer();
 				}
-				else if (g_extEditMode == 3) {
-					g_extEditMode = 0;
+				else if (g_extEditMode == EXT_EDIT_TEMPO) {
+					g_extEditMode = EXT_EDIT_OFF;
 				}
 				else {
 					Main_OnCommand(40364, 0); // Options: Toggle metronome
-					g_extEditMode = 0;
+					g_extEditMode = EXT_EDIT_OFF;
 				}
 				break;
 			case CMD_PLAY_CLIP:
-				if (g_extEditMode == 1) {
+				if (g_extEditMode == EXT_EDIT_ON) {
 					// ExtEdit: Insert track
 					Main_OnCommand(40001, 0); // Insert Track
 					SetTrackListChange();
@@ -998,16 +1013,16 @@ class NiMidiSurface: public BaseSurface {
 				else {
 					_onRefocusBank();
 				}
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_STOP_CLIP:
 				// Exit Extended Edit Mode
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_MOVE_TRANSPORT:
 			case CMD_CHANGE_SEL_TRACK_VOLUME:
 			case CMD_CHANGE_SEL_TRACK_PAN:
-				if (g_extEditMode == 2) {
+				if (g_extEditMode == EXT_EDIT_LOOP) {
 					double initCursorPos = GetCursorPosition();
 					double startLoop;
 					double endLoop;
@@ -1023,7 +1038,7 @@ class NiMidiSurface: public BaseSurface {
 					GetSet_LoopTimeRange(true, true, &startLoop, &endLoop, false); // set looping section start and end points
 					SetEditCurPos(initCursorPos, false, false);
 				}
-				else if (g_extEditMode == 3) {
+				else if (g_extEditMode == EXT_EDIT_TEMPO) {
 					if (value <= 63) {
 						Main_OnCommand(41129, 0); // Increase project tempo by 1bpm
 					}
@@ -1039,12 +1054,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				if (value > 0) {
-					g_connectedState = 2; // HELLO acknowledged = fully connected to keyboard
 					this->_sendCc(CMD_UNDO, 1);
 					this->_sendCc(CMD_REDO, 1);
 					this->_sendCc(CMD_CLEAR, 1);
 					this->_sendCc(CMD_QUANTIZE, 1);
 					this->_allMixerUpdate();
+					g_connectedState = KK_NIHIA_CONNECTED; // HELLO acknowledged = fully connected to keyboard
 					Help_Set("ReaKontrol: KK-Keyboard connected", false);
 #ifdef CONNECTION_DIAGNOSTICS
 					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
@@ -1054,7 +1069,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_PLAY:
 				// Toggles between play and pause
 				CSurf_OnPlay();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_RESTART:
 				CSurf_GoStart();
@@ -1063,17 +1078,17 @@ class NiMidiSurface: public BaseSurface {
 					// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
 					CSurf_OnPlay();
 				}
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_COUNT:
 				Main_OnCommand(41745, 0); // Enable the metronome
 				this->_enableRecCountIn(); // Enable count-in for recording
 				CSurf_OnRecord();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_STOP:
 				CSurf_OnStop();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_TEMPO:
 				Main_OnCommand(1134, 0); // Transport: Tap tempo
@@ -1092,11 +1107,11 @@ class NiMidiSurface: public BaseSurface {
 				Main_OnCommand(40604, 0); // Open window showing track record settings
 				// ToDo: Can we close the windows by e.g. SetCursorContext()?
 				// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_AUTO:
 				this->_onSelAutoToggle();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
@@ -1129,12 +1144,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_TRACK_MUTED:
 				// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
 				this->_onTrackMute(value);
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_TRACK_SOLOED:
 				// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
 				this->_onTrackSolo(value);
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
@@ -1145,7 +1160,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME6:
 			case CMD_KNOB_VOLUME7:
 				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
@@ -1156,15 +1171,15 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_TOGGLE_SEL_TRACK_MUTE:
 				this->_onSelTrackMute();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			case CMD_TOGGLE_SEL_TRACK_SOLO:
 				this->_onSelTrackSolo();
-				g_extEditMode = 0;
+				g_extEditMode = EXT_EDIT_OFF;
 				break;
 			default:
 #ifdef BASIC_DIAGNOSTICS
