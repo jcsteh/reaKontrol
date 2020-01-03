@@ -1,8 +1,9 @@
 /*
  * ReaKontrol
  * Main plug-in code
- * Author: James Teh <jamie@jantrid.net>
- * Copyright 2018-2019 James Teh
+ * Author: brumbear@pacificpeaks
+ * Copyright 2019-2020 Pacific Peaks Studio
+ * Previous Authors: James Teh <jamie@jantrid.net>, Leonard de Ruijter, brumbear@pacificpeaks, Copyright 2018-2019 James Teh
  * License: GNU General Public License version 2.0
  */
 

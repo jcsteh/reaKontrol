@@ -2,9 +2,9 @@
  * ReaKontrol
  * Support for MIDI protocol used by Komplete Kontrol S-series Mk2, A-series
  * and M-Series
- * Authors: James Teh <jamie@jantrid.net>, Leonard de Ruijter, brumbear@pacificpeaks
- * Copyright 2018-2019 James Teh
- * Copyright 2019 Pacific Peaks Studio
+ * Author: brumbear@pacificpeaks
+ * Copyright 2019-2020 Pacific Peaks Studio
+ * Previous Authors: James Teh <jamie@jantrid.net>, Leonard de Ruijter, brumbear@pacificpeaks, Copyright 2018-2019 James Teh
  * License: GNU General Public License version 2.0
  */
 
