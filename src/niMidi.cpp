@@ -454,6 +454,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetPlayState " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Update transport button lights
 		if (rec) {
 			this->_sendCc(CMD_REC, 1);
@@ -484,6 +485,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetRepeatState " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Update repeat (aka loop) button light
 		if (rep) {
 			this->_sendCc(CMD_LOOP, 1);
@@ -499,6 +501,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetTrackListChange " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
@@ -537,6 +540,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceSelected - Track: " << CSurf_TrackToID(track, false) << " Selected: " << selected << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif		
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -628,6 +632,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceVolume - Track: " << CSurf_TrackToID(track, false) << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -645,6 +650,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfacePan - Track: " << CSurf_TrackToID(track, false) << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -661,6 +667,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceMute - Track: " << CSurf_TrackToID(track, false) << " Mute " << mute << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if (id == g_trackInFocus) {
 			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
@@ -681,6 +688,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceSolo - Track: " << CSurf_TrackToID(track, false) << " Solo "<< solo << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
 		
@@ -740,6 +748,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceRecArm - Track: " << CSurf_TrackToID(track, false) << " Armed " << armed << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Note: record arm also leads to a cascade of other callbacks (-> filtering required!)
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
@@ -749,6 +758,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual int Extended(int call, void *parm1, void *parm2, void *parm3) override {
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		if (call != CSURF_EXT_SETMETRONOME) {
 			return 0; // we are only interested in the metronome. Note: This works fine but does not update the status when changing project tabs
 		}
