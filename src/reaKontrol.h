@@ -1,8 +1,9 @@
 /*
  * ReaKontrol
  * Main header
- * Author: James Teh <jamie@jantrid.net>
- * Copyright 2018-2019 James Teh
+ * Author: brumbear@pacificpeaks
+ * Copyright 2019-2020 Pacific Peaks Studio
+ * Previous Authors: James Teh <jamie@jantrid.net>, Leonard de Ruijter, brumbear@pacificpeaks, Copyright 2018-2019 James Teh
  * License: GNU General Public License version 2.0
  */
 
@@ -65,6 +66,8 @@
 #define REAPERAPI_WANT_SetEditCurPos
 #define REAPERAPI_WANT_TimeMap_GetTimeSigAtTime
 #define REAPERAPI_WANT_GetSet_LoopTimeRange
+#define REAPERAPI_WANT_Help_Set
+#define REAPERAPI_WANT_ShowMessageBox
 
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
@@ -74,7 +77,7 @@ const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {
 	public:
-	BaseSurface(int inDev, int outDev);
+	BaseSurface();
 	virtual ~BaseSurface();
 	virtual const char* GetConfigString() override {
 		return "";
@@ -87,5 +90,5 @@ class BaseSurface: public IReaperControlSurface {
 	virtual void _onMidiEvent(MIDI_event_t* event) = 0;
 };
 
-IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
-IReaperControlSurface* createMcuSurface(int inDev, int outDev);
+IReaperControlSurface* createNiMidiSurface();
+
