@@ -104,6 +104,9 @@ static bool g_anySolo = false;
 static int g_soloStateBank[BANK_NUM_TRACKS] = { 0 };
 static bool g_muteStateBank[BANK_NUM_TRACKS] = { false };
 
+static bool g_KKcountInTriggered = false; // to discriminate if COUNT IN was requested by keyboard or from Reaper
+static int g_KKcountInMetroState = 0; // to store metronome state when COUNT IN was requested by keyboard
+
 // Extended Edit Control State Variables
 const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode
 const int EXT_EDIT_ON = 1; // Extended Edit 1st stage commands
@@ -464,12 +467,10 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else {
 			this->_sendCc(CMD_REC, 0);
-			this->_disableRecCountIn(); // disable count-in for recording
 		}
 		if (pause) {
 			this->_sendCc(CMD_PLAY, 1);
 			this->_sendCc(CMD_STOP, 1); // since there is no Pause button on KK we indicate it with both Play and Stop lit
-			this->_disableRecCountIn(); // disable count-in for recording
 		}
 		else if (play) {
 			this->_sendCc(CMD_PLAY, 1);
@@ -478,7 +479,16 @@ class NiMidiSurface: public BaseSurface {
 		else {
 			this->_sendCc(CMD_PLAY, 0);
 			this->_sendCc(CMD_STOP, 1);
-			this->_disableRecCountIn(); // disable count-in for recording
+			if (g_KKcountInTriggered) {
+				this->_disableRecCountIn(); // disable count-in for recording if it had been requested earlier by keyboard
+				// Restore metronome state to last known state while COUNT IN was triggered
+				if (g_KKcountInMetroState == 0) {
+					Main_OnCommand(41746, 0); // Disable the metronome
+				}
+				else {
+					Main_OnCommand(41745, 0); // Enable the metronome
+				}
+			}
 		}
 	}
 		
@@ -831,6 +841,8 @@ class NiMidiSurface: public BaseSurface {
 					CSurf_OnRecord();
 					break;
 				case CMD_COUNT:
+					g_KKcountInTriggered = true;
+					g_KKcountInMetroState = this->_metronomeState();
 					Main_OnCommand(41745, 0); // Enable the metronome
 					this->_enableRecCountIn(); // Enable count-in for recording
 					CSurf_OnRecord();
@@ -848,6 +860,9 @@ class NiMidiSurface: public BaseSurface {
 					break;
 				case CMD_METRO:
 					Main_OnCommand(40364, 0); // Options: Toggle metronome
+					if (g_KKcountInTriggered) {
+						g_KKcountInMetroState = this->_metronomeState();
+					}
 					break;
 				case CMD_TEMPO:
 					Main_OnCommand(1134, 0); // Transport: Tap tempo
@@ -1017,6 +1032,9 @@ class NiMidiSurface: public BaseSurface {
 					}
 					else {
 						Main_OnCommand(40364, 0); // Options: Toggle metronome
+						if (g_KKcountInTriggered) {
+							g_KKcountInMetroState = this->_metronomeState();
+						}
 						g_extEditMode = EXT_EDIT_OFF;
 					}
 					break;
@@ -1082,6 +1100,8 @@ class NiMidiSurface: public BaseSurface {
 					g_extEditMode = EXT_EDIT_OFF;
 					break;
 				case CMD_COUNT:
+					g_KKcountInTriggered = true;
+					g_KKcountInMetroState = this->_metronomeState();
 					Main_OnCommand(41745, 0); // Enable the metronome
 					this->_enableRecCountIn(); // Enable count-in for recording
 					CSurf_OnRecord();
@@ -1663,9 +1683,13 @@ class NiMidiSurface: public BaseSurface {
 		return p;
 	}
 
+	int _metronomeState() {
+		return (*(int*)GetConfigVar("projmetroen") & 1);
+	}
+
 	void _metronomeUpdate() {
 		// Actively poll the metronome status on project tab changes
-		this->_sendCc(CMD_METRO, (*(int*)GetConfigVar("projmetroen") & 1));
+		this->_sendCc(CMD_METRO, this->_metronomeState());
 	}
 
 	void _enableRecCountIn() {
@@ -1674,6 +1698,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _disableRecCountIn() {
 		*(int*)GetConfigVar("projmetroen") &= ~16;
+		g_KKcountInTriggered = false;
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
