@@ -227,6 +227,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual ~NiMidiSurface() {
+		for (int i = 0; i < 8; ++i) {
+			this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+		}
 		this->_sendCc(CMD_GOODBYE, 0);
 		this->_protocolVersion = 0;
 		g_connectedState = KK_NOT_CONNECTED;
@@ -292,7 +295,7 @@ class NiMidiSurface: public BaseSurface {
 				scanTimer = 0;
 				if (connectCount < CONNECT_N) {
 					connectCount += 1;
-					this->_sendCc(CMD_HELLO, 0);
+					this->_sendCc(CMD_HELLO, 1); // ToDo: Find out if A and M series require protocol version 1, whereas S Mk2 requires/supports version 2
 				}
 				else {
 					int answer = ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Please restart NI services (NIHostIntegrationAgent), then retry. ", "ReaKontrol", 5);
