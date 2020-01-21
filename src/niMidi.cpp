@@ -298,7 +298,11 @@ class NiMidiSurface: public BaseSurface {
 				scanTimer = 0;
 				if (connectCount < CONNECT_N) {
 					connectCount += 1;
-					this->_sendCc(CMD_HELLO, 1); // ToDo: Find out if A and M series require protocol version 1, whereas S Mk2 requires/supports version 2
+					this->_sendCc(CMD_HELLO, 2); // Protocol version 2
+					// ToDo: Find out if A and M series require or only support protocol version 1 or 3.
+					// S Mk2 supports versions 1-3, but version 2 is best.
+					// Version 1 does not fully support SHIFT button with encoder
+					// Version 3 does not light up TEMPO button
 				}
 				else {
 					int answer = ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Please restart NI services (NIHostIntegrationAgent), then retry. ", "ReaKontrol", 5);
@@ -801,7 +805,8 @@ class NiMidiSurface: public BaseSurface {
 			<< this->_bankEnd << " anySolo "
 			<< g_anySolo << " extEditMode "
 			<< g_extEditMode << " connectedState"
-			<< g_connectedState <<			
+			<< g_connectedState << " proto version"
+			<< this->_protocolVersion <<
 			endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
