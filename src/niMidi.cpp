@@ -227,6 +227,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual ~NiMidiSurface() {
+		for (int i = 0; i < 8; ++i) {
+			this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+		}
 		this->_sendCc(CMD_GOODBYE, 0);
 		this->_protocolVersion = 0;
 		g_connectedState = KK_NOT_CONNECTED;
@@ -292,7 +295,7 @@ class NiMidiSurface: public BaseSurface {
 				scanTimer = 0;
 				if (connectCount < CONNECT_N) {
 					connectCount += 1;
-					this->_sendCc(CMD_HELLO, 0);
+					this->_sendCc(CMD_HELLO, 1); // ToDo: Find out if A and M series require protocol version 1, whereas S Mk2 requires/supports version 2
 				}
 				else {
 					int answer = ShowMessageBox("Komplete Kontrol Keyboard detected but failed to connect. Please restart NI services (NIHostIntegrationAgent), then retry. ", "ReaKontrol", 5);
@@ -454,6 +457,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetPlayState " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Update transport button lights
 		if (rec) {
 			this->_sendCc(CMD_REC, 1);
@@ -484,6 +488,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetRepeatState " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Update repeat (aka loop) button light
 		if (rep) {
 			this->_sendCc(CMD_LOOP, 1);
@@ -499,6 +504,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetTrackListChange " << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// If tracklist changes update Mixer View and ensure sanity of track and bank focus
 		int numTracks = CSurf_NumTracks(false);
 		// Protect against loosing track focus that could impede track navigation. Set focus on last track in this case.
@@ -537,6 +543,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceSelected - Track: " << CSurf_TrackToID(track, false) << " Selected: " << selected << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif		
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		if (selected) {
 			int id = CSurf_TrackToID(track, false);
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -628,6 +635,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceVolume - Track: " << CSurf_TrackToID(track, false) << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -645,6 +653,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfacePan - Track: " << CSurf_TrackToID(track, false) << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
 			int numInBank = id % BANK_NUM_TRACKS;
@@ -661,6 +670,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceMute - Track: " << CSurf_TrackToID(track, false) << " Mute " << mute << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		int id = CSurf_TrackToID(track, false);
 		if (id == g_trackInFocus) {
 			this->_sendSysex(CMD_TOGGLE_SEL_TRACK_MUTE, mute ? 1 : 0, 0); // Needed by NIHIA v1.8.7 (KK v2.1.2)
@@ -681,6 +691,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceSolo - Track: " << CSurf_TrackToID(track, false) << " Solo "<< solo << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Note: Solo in Reaper can have different meanings (Solo In Place, Solo In Front and much more -> Reaper Preferences)
 		int id = CSurf_TrackToID(track, false);
 		
@@ -740,6 +751,7 @@ class NiMidiSurface: public BaseSurface {
 		s << "CALL: SetSurfaceRecArm - Track: " << CSurf_TrackToID(track, false) << " Armed " << armed << endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
+		if (g_connectedState != KK_NIHIA_CONNECTED) return;
 		// Note: record arm also leads to a cascade of other callbacks (-> filtering required!)
 		int id = CSurf_TrackToID(track, false);
 		if ((id >= this->_bankStart) && (id <= this->_bankEnd)) {
@@ -749,6 +761,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual int Extended(int call, void *parm1, void *parm2, void *parm3) override {
+		if (g_connectedState != KK_NIHIA_CONNECTED) return 0;
 		if (call != CSURF_EXT_SETMETRONOME) {
 			return 0; // we are only interested in the metronome. Note: This works fine but does not update the status when changing project tabs
 		}
@@ -782,415 +795,404 @@ class NiMidiSurface: public BaseSurface {
 			endl;
 		ShowConsoleMsg(s.str().c_str());
 #endif
-		if (g_extEditMode == EXT_EDIT_OFF) {
-			// Normal Keyboard Mode
-			switch (command) {
-			case CMD_HELLO:
-				this->_protocolVersion = value;
-				if (value > 0) {					
-					this->_sendCc(CMD_UNDO, 1);
-					this->_sendCc(CMD_REDO, 1);
-					this->_sendCc(CMD_CLEAR, 1);
-					this->_sendCc(CMD_QUANTIZE, 1);
-					this->_allMixerUpdate();
-					g_connectedState = KK_NIHIA_CONNECTED; // HELLO acknowledged = fully connected to keyboard
-					Help_Set("ReaKontrol: KK-Keyboard connected", false);
+		if (command == CMD_HELLO) {
+			this->_protocolVersion = value;
+			if (value > 0) {
+				this->_sendCc(CMD_UNDO, 1);
+				this->_sendCc(CMD_REDO, 1);
+				this->_sendCc(CMD_CLEAR, 1);
+				this->_sendCc(CMD_QUANTIZE, 1);
+				this->_allMixerUpdate();
+				g_connectedState = KK_NIHIA_CONNECTED; // HELLO acknowledged = fully connected to keyboard
+				Help_Set("ReaKontrol: KK-Keyboard connected", false);
 #ifdef CONNECTION_DIAGNOSTICS
-					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
+				ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
 #endif
-				}
-				break;
-			case CMD_PLAY:
-				// Toggles between play and pause
-				CSurf_OnPlay();
-				break;
-			case CMD_RESTART:
-				CSurf_GoStart();
-				if (GetPlayState() & ~1) {
-					// Only play if current state is not playing
-					// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
-					CSurf_OnPlay();
-				}
-				break;
-			case CMD_REC:
-				CSurf_OnRecord();
-				break;
-			case CMD_COUNT:
-				Main_OnCommand(41745, 0); // Enable the metronome
-				this->_enableRecCountIn(); // Enable count-in for recording
-				CSurf_OnRecord();
-				break;
-			case CMD_STOP:
-				CSurf_OnStop();
-				break;
-			case CMD_CLEAR:
-				// Delete active takes. Typically, when recording an item in loop mode this allows to remove take by take until the entire item is removed.
-				Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
-				Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
-				break;
-			case CMD_LOOP:
-				Main_OnCommand(1068, 0); // Transport: Toggle repeat
-				break;
-			case CMD_METRO:
-				Main_OnCommand(40364, 0); // Options: Toggle metronome
-				break;
-			case CMD_TEMPO:
-				Main_OnCommand(1134, 0); // Transport: Tap tempo
-				break;
-			case CMD_UNDO:
-				Main_OnCommand(40029, 0); // Edit: Undo
-				break;
-			case CMD_REDO:
-				Main_OnCommand(40030, 0); // Edit: Redo
-				break;
-			case CMD_QUANTIZE:
-				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
-				Main_OnCommand(40604, 0); // Open window showing track record settings
-				// ToDo: Can we close the windows by e.g. SetCursorContext()?
-				// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
-				break;
-			case CMD_AUTO:
-				this->_onSelAutoToggle();
-				break;
-			case CMD_NAV_TRACKS:
-				// Value is -1 or 1.
-				this->_onTrackNav(convertSignedMidiValue(value));
-				break;
-			case CMD_NAV_BANKS:
-				// Value is -1 or 1.
-				this->_onBankSelect(convertSignedMidiValue(value));
-				break;
-			case CMD_NAV_CLIPS:
-				// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
-				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40173 : // Markers: Go to next marker/project end
-					40172, // Markers: Go to previous marker/project start
-					0);
-				break;
-			case CMD_MOVE_TRANSPORT:
-				if (value <= 63) {
-					Main_OnCommand(40647, 0); // move cursor right 1 grid division (no seek)
-				}
-				else {
-					Main_OnCommand(40646, 0); // move cursor left 1 grid division (no seek)
-				}
-				break;
-			case CMD_MOVE_LOOP:
-				if (value <= 63) {
-					Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
-				}
-				else {
-					Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
-				}
-				break;
-			case CMD_TRACK_SELECTED:
-				// Select a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackSelect(value);
-				break;
-			case CMD_TRACK_MUTED:
-				// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackMute(value);
-				break;
-			case CMD_TRACK_SOLOED:
-				// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackSolo(value);
-				break;
-			case CMD_KNOB_VOLUME0:
-			case CMD_KNOB_VOLUME1:
-			case CMD_KNOB_VOLUME2:
-			case CMD_KNOB_VOLUME3:
-			case CMD_KNOB_VOLUME4:
-			case CMD_KNOB_VOLUME5:
-			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:
-				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
-				break;
-			case CMD_KNOB_PAN0:
-			case CMD_KNOB_PAN1:
-			case CMD_KNOB_PAN2:
-			case CMD_KNOB_PAN3:
-			case CMD_KNOB_PAN4:
-			case CMD_KNOB_PAN5:
-			case CMD_KNOB_PAN6:
-			case CMD_KNOB_PAN7:
-				this->_onKnobPanChange(command, convertSignedMidiValue(value));
-				break;
-			case CMD_PLAY_CLIP:
-				// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
-				_onRefocusBank();
-				break;
-			case CMD_STOP_CLIP:
-				// Enter Extended Edit Mode
-				g_extEditMode = EXT_EDIT_ON;
-				break;
-			case CMD_CHANGE_SEL_TRACK_VOLUME:
-				this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
-				break;
-			case CMD_CHANGE_SEL_TRACK_PAN:
-				this->_onSelTrackPanChange(convertSignedMidiValue(value));
-				break;
-			case CMD_TOGGLE_SEL_TRACK_MUTE:
-				this->_onSelTrackMute();
-				break;
-			case CMD_TOGGLE_SEL_TRACK_SOLO:
-				this->_onSelTrackSolo();
-				break;
-			default:
-#ifdef BASIC_DIAGNOSTICS
-				ostringstream s;
-				s << "Unhandled MIDI message " << showbase << hex
-					<< (int)event->midi_message[0] << " "
-					<< (int)event->midi_message[1] << " "
-					<< (int)event->midi_message[2] << endl;
-				ShowConsoleMsg(s.str().c_str());
-#endif
-				break;
 			}
-		} 
-		else {
-		// ==================================================================================================================	
-		// Extended Edit Mode: We duplicate all commands here from Normal Mode to have more fine control over behavior
-		// ==================================================================================================================	
-			switch (command) {
+		}
 
-			// EXTENDED EDIT COMMANDS =======================================================================================
-			case CMD_REC:
-				if (g_extEditMode == EXT_EDIT_ON) {
-					// ExtEdit: Toggle record arm for selected track
-					Main_OnCommand(9, 0); // Toggle record arm for selected track
-				}
-				else {
+		if (g_connectedState == KK_NIHIA_CONNECTED) {
+			if (g_extEditMode == EXT_EDIT_OFF) {
+				// Normal Keyboard Mode
+				switch (command) {
+				case CMD_PLAY:
+					// Toggles between play and pause
+					CSurf_OnPlay();
+					break;
+				case CMD_RESTART:
+					CSurf_GoStart();
+					if (GetPlayState() & ~1) {
+						// Only play if current state is not playing
+						// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
+						CSurf_OnPlay();
+					}
+					break;
+				case CMD_REC:
 					CSurf_OnRecord();
-				}
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_CLEAR:
-				if (g_extEditMode == EXT_EDIT_ON) {
-					// ExtEdit: Remove Selected Track
-					Main_OnCommand(40005, 0); // Remove Selected Track
-					SetTrackListChange();
-				}
-				else {
+					break;
+				case CMD_COUNT:
+					Main_OnCommand(41745, 0); // Enable the metronome
+					this->_enableRecCountIn(); // Enable count-in for recording
+					CSurf_OnRecord();
+					break;
+				case CMD_STOP:
+					CSurf_OnStop();
+					break;
+				case CMD_CLEAR:
 					// Delete active takes. Typically, when recording an item in loop mode this allows to remove take by take until the entire item is removed.
 					Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
 					Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
-				}
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_LOOP:
-				// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
-				if (g_extEditMode == EXT_EDIT_ON) {
-					g_extEditMode = EXT_EDIT_LOOP;
-				}
-				else if (g_extEditMode == EXT_EDIT_LOOP) {
-					g_extEditMode = EXT_EDIT_OFF;
-				}
-				else {
+					break;
+				case CMD_LOOP:
 					Main_OnCommand(1068, 0); // Transport: Toggle repeat
-					g_extEditMode = EXT_EDIT_OFF;
-				}
-				break;
-			case CMD_METRO:
-				if (g_extEditMode == EXT_EDIT_ON) {
-					g_extEditMode = EXT_EDIT_TEMPO;
-					this->_showTempoInMixer();
-				}
-				else if (g_extEditMode == EXT_EDIT_TEMPO) {
-					g_extEditMode = EXT_EDIT_OFF;
-				}
-				else {
+					break;
+				case CMD_METRO:
 					Main_OnCommand(40364, 0); // Options: Toggle metronome
-					g_extEditMode = EXT_EDIT_OFF;
-				}
-				break;
-			case CMD_PLAY_CLIP:
-				if (g_extEditMode == EXT_EDIT_ON) {
-					// ExtEdit: Insert track
-					Main_OnCommand(40001, 0); // Insert Track
-					SetTrackListChange();
-				}
-				else {
+					break;
+				case CMD_TEMPO:
+					Main_OnCommand(1134, 0); // Transport: Tap tempo
+					break;
+				case CMD_UNDO:
+					Main_OnCommand(40029, 0); // Edit: Undo
+					break;
+				case CMD_REDO:
+					Main_OnCommand(40030, 0); // Edit: Redo
+					break;
+				case CMD_QUANTIZE:
+					Main_OnCommand(42033, 0); // Toggle input quantize for selected track
+					Main_OnCommand(40604, 0); // Open window showing track record settings
+					// ToDo: Can we close the windows by e.g. SetCursorContext()?
+					// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
+					break;
+				case CMD_AUTO:
+					this->_onSelAutoToggle();
+					break;
+				case CMD_NAV_TRACKS:
+					// Value is -1 or 1.
+					this->_onTrackNav(convertSignedMidiValue(value));
+					break;
+				case CMD_NAV_BANKS:
+					// Value is -1 or 1.
+					this->_onBankSelect(convertSignedMidiValue(value));
+					break;
+				case CMD_NAV_CLIPS:
+					// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
+					// Value is -1 or 1.
+					Main_OnCommand(value == 1 ?
+						40173 : // Markers: Go to next marker/project end
+						40172, // Markers: Go to previous marker/project start
+						0);
+					break;
+				case CMD_MOVE_TRANSPORT:
+					if (value <= 63) {
+						Main_OnCommand(40647, 0); // move cursor right 1 grid division (no seek)
+					}
+					else {
+						Main_OnCommand(40646, 0); // move cursor left 1 grid division (no seek)
+					}
+					break;
+				case CMD_MOVE_LOOP:
+					if (value <= 63) {
+						Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
+					}
+					else {
+						Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
+					}
+					break;
+				case CMD_TRACK_SELECTED:
+					// Select a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackSelect(value);
+					break;
+				case CMD_TRACK_MUTED:
+					// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackMute(value);
+					break;
+				case CMD_TRACK_SOLOED:
+					// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackSolo(value);
+					break;
+				case CMD_KNOB_VOLUME0:
+				case CMD_KNOB_VOLUME1:
+				case CMD_KNOB_VOLUME2:
+				case CMD_KNOB_VOLUME3:
+				case CMD_KNOB_VOLUME4:
+				case CMD_KNOB_VOLUME5:
+				case CMD_KNOB_VOLUME6:
+				case CMD_KNOB_VOLUME7:
+					this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+					break;
+				case CMD_KNOB_PAN0:
+				case CMD_KNOB_PAN1:
+				case CMD_KNOB_PAN2:
+				case CMD_KNOB_PAN3:
+				case CMD_KNOB_PAN4:
+				case CMD_KNOB_PAN5:
+				case CMD_KNOB_PAN6:
+				case CMD_KNOB_PAN7:
+					this->_onKnobPanChange(command, convertSignedMidiValue(value));
+					break;
+				case CMD_PLAY_CLIP:
+					// We use this for a different purpose: switch Mixer view to the bank containing the currently focused (= selected) track
 					_onRefocusBank();
-				}
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_STOP_CLIP:
-				// Exit Extended Edit Mode
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_MOVE_TRANSPORT:
-			case CMD_CHANGE_SEL_TRACK_VOLUME:
-			case CMD_CHANGE_SEL_TRACK_PAN:
-				if (g_extEditMode == EXT_EDIT_LOOP) {
-					double initCursorPos = GetCursorPosition();
-					double startLoop;
-					double endLoop;
-					GetSet_LoopTimeRange(false, true, &startLoop, &endLoop, false); // get looping section start and end points
-					SetEditCurPos(endLoop, false, false);
-					if (value <= 63) {
-						Main_OnCommand(40841, 0); // Move edit cursor forward 1 beat (no seek)
-					}
-					else {
-						Main_OnCommand(40842, 0); // Move edit cursor back 1 beat (no seek)
-					}
-					endLoop = GetCursorPosition();
-					GetSet_LoopTimeRange(true, true, &startLoop, &endLoop, false); // set looping section start and end points
-					SetEditCurPos(initCursorPos, false, false);
-				}
-				else if (g_extEditMode == EXT_EDIT_TEMPO) {
-					if (value <= 63) {
-						Main_OnCommand(41129, 0); // Increase project tempo by 1bpm
-					}
-					else {
-						Main_OnCommand(41130, 0); // Decrease project tempo by 1bpm
-					}
-					this->_showTempoInMixer();
-				}
-				break;
-
-			// Copied Commands fron Normal Mode ================================================================================
-
-			case CMD_HELLO:
-				this->_protocolVersion = value;
-				if (value > 0) {
-					this->_sendCc(CMD_UNDO, 1);
-					this->_sendCc(CMD_REDO, 1);
-					this->_sendCc(CMD_CLEAR, 1);
-					this->_sendCc(CMD_QUANTIZE, 1);
-					this->_allMixerUpdate();
-					g_connectedState = KK_NIHIA_CONNECTED; // HELLO acknowledged = fully connected to keyboard
-					Help_Set("ReaKontrol: KK-Keyboard connected", false);
-#ifdef CONNECTION_DIAGNOSTICS
-					ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
-#endif
-				}
-				break;
-			case CMD_PLAY:
-				// Toggles between play and pause
-				CSurf_OnPlay();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_RESTART:
-				CSurf_GoStart();
-				if (GetPlayState() & ~1) {
-					// Only play if current state is not playing
-					// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
-					CSurf_OnPlay();
-				}
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_COUNT:
-				Main_OnCommand(41745, 0); // Enable the metronome
-				this->_enableRecCountIn(); // Enable count-in for recording
-				CSurf_OnRecord();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_STOP:
-				CSurf_OnStop();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_TEMPO:
-				Main_OnCommand(1134, 0); // Transport: Tap tempo
-				break;
-				// ToDo: Consider also exiting Extended Edit
-			case CMD_UNDO:
-				Main_OnCommand(40029, 0); // Edit: Undo
-				// ToDo: Consider also exiting Extended Edit
-				break;
-			case CMD_REDO:
-				Main_OnCommand(40030, 0); // Edit: Redo
-				// ToDo: Consider also exiting Extended Edit
-				break;
-			case CMD_QUANTIZE:
-				Main_OnCommand(42033, 0); // Toggle input quantize for selected track
-				Main_OnCommand(40604, 0); // Open window showing track record settings
-				// ToDo: Can we close the windows by e.g. SetCursorContext()?
-				// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_AUTO:
-				this->_onSelAutoToggle();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_NAV_TRACKS:
-				// Value is -1 or 1.
-				this->_onTrackNav(convertSignedMidiValue(value));
-				break;
-			case CMD_NAV_BANKS:
-				// Value is -1 or 1.
-				this->_onBankSelect(convertSignedMidiValue(value));
-				break;
-			case CMD_NAV_CLIPS:
-				// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
-				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40173 : // Markers: Go to next marker/project end
-					40172, // Markers: Go to previous marker/project start
-					0);
-				break;
-			case CMD_MOVE_LOOP:
-				if (value <= 63) {
-					Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
-				}
-				else {
-					Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
-				}
-				break;
-			case CMD_TRACK_SELECTED:
-				// Select a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackSelect(value);
-				break;
-			case CMD_TRACK_MUTED:
-				// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackMute(value);
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_TRACK_SOLOED:
-				// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackSolo(value);
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_KNOB_VOLUME0:
-			case CMD_KNOB_VOLUME1:
-			case CMD_KNOB_VOLUME2:
-			case CMD_KNOB_VOLUME3:
-			case CMD_KNOB_VOLUME4:
-			case CMD_KNOB_VOLUME5:
-			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:
-				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_KNOB_PAN0:
-			case CMD_KNOB_PAN1:
-			case CMD_KNOB_PAN2:
-			case CMD_KNOB_PAN3:
-			case CMD_KNOB_PAN4:
-			case CMD_KNOB_PAN5:
-			case CMD_KNOB_PAN6:
-			case CMD_KNOB_PAN7:
-				this->_onKnobPanChange(command, convertSignedMidiValue(value));
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_TOGGLE_SEL_TRACK_MUTE:
-				this->_onSelTrackMute();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			case CMD_TOGGLE_SEL_TRACK_SOLO:
-				this->_onSelTrackSolo();
-				g_extEditMode = EXT_EDIT_OFF;
-				break;
-			default:
+					break;
+				case CMD_STOP_CLIP:
+					// Enter Extended Edit Mode
+					g_extEditMode = EXT_EDIT_ON;
+					break;
+				case CMD_CHANGE_SEL_TRACK_VOLUME:
+					this->_onSelTrackVolumeChange(convertSignedMidiValue(value));
+					break;
+				case CMD_CHANGE_SEL_TRACK_PAN:
+					this->_onSelTrackPanChange(convertSignedMidiValue(value));
+					break;
+				case CMD_TOGGLE_SEL_TRACK_MUTE:
+					this->_onSelTrackMute();
+					break;
+				case CMD_TOGGLE_SEL_TRACK_SOLO:
+					this->_onSelTrackSolo();
+					break;
+				default:
 #ifdef BASIC_DIAGNOSTICS
-				ostringstream s;
-				s << "Unhandled MIDI message " << showbase << hex
-					<< (int)event->midi_message[0] << " "
-					<< (int)event->midi_message[1] << " "
-					<< (int)event->midi_message[2] << endl;
-				ShowConsoleMsg(s.str().c_str());
+					ostringstream s;
+					s << "Unhandled MIDI message " << showbase << hex
+						<< (int)event->midi_message[0] << " "
+						<< (int)event->midi_message[1] << " "
+						<< (int)event->midi_message[2] << endl;
+					ShowConsoleMsg(s.str().c_str());
 #endif
-				break;
+					break;
+				}
+			}
+			else {
+				// ==================================================================================================================	
+				// Extended Edit Mode: We duplicate all commands here from Normal Mode to have finer control over behavior
+				// ==================================================================================================================	
+				switch (command) {
+
+					// EXTENDED EDIT COMMANDS =======================================================================================
+				case CMD_REC:
+					if (g_extEditMode == EXT_EDIT_ON) {
+						// ExtEdit: Toggle record arm for selected track
+						Main_OnCommand(9, 0); // Toggle record arm for selected track
+					}
+					else {
+						CSurf_OnRecord();
+					}
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_CLEAR:
+					if (g_extEditMode == EXT_EDIT_ON) {
+						// ExtEdit: Remove Selected Track
+						Main_OnCommand(40005, 0); // Remove Selected Track
+						SetTrackListChange();
+					}
+					else {
+						// Delete active takes. Typically, when recording an item in loop mode this allows to remove take by take until the entire item is removed.
+						Main_OnCommand(40129, 0); // Edit: Delete active take (leaves empty lane if other takes present in item)
+						Main_OnCommand(41349, 0); // Edit: Remove the empty take lane before the active take
+					}
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_LOOP:
+					// ToDo: ExtEdit: Change right edge of time selection +/- 1 beat length: +(#40631, #40841, #40626), -(#40631, #40842, #40626)
+					if (g_extEditMode == EXT_EDIT_ON) {
+						g_extEditMode = EXT_EDIT_LOOP;
+					}
+					else if (g_extEditMode == EXT_EDIT_LOOP) {
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					else {
+						Main_OnCommand(1068, 0); // Transport: Toggle repeat
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					break;
+				case CMD_METRO:
+					if (g_extEditMode == EXT_EDIT_ON) {
+						g_extEditMode = EXT_EDIT_TEMPO;
+						this->_showTempoInMixer();
+					}
+					else if (g_extEditMode == EXT_EDIT_TEMPO) {
+						this->_allMixerUpdate();
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					else {
+						Main_OnCommand(40364, 0); // Options: Toggle metronome
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					break;
+				case CMD_PLAY_CLIP:
+					if (g_extEditMode == EXT_EDIT_ON) {
+						// ExtEdit: Insert track
+						Main_OnCommand(40001, 0); // Insert Track
+						SetTrackListChange();
+					}
+					else {
+						_onRefocusBank();
+					}
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_STOP_CLIP:
+					// Exit Extended Edit Mode
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_MOVE_TRANSPORT:
+				case CMD_CHANGE_SEL_TRACK_VOLUME:
+				case CMD_CHANGE_SEL_TRACK_PAN:
+					if (g_extEditMode == EXT_EDIT_LOOP) {
+						double initCursorPos = GetCursorPosition();
+						double startLoop;
+						double endLoop;
+						GetSet_LoopTimeRange(false, true, &startLoop, &endLoop, false); // get looping section start and end points
+						SetEditCurPos(endLoop, false, false);
+						if (value <= 63) {
+							Main_OnCommand(40841, 0); // Move edit cursor forward 1 beat (no seek)
+						}
+						else {
+							Main_OnCommand(40842, 0); // Move edit cursor back 1 beat (no seek)
+						}
+						endLoop = GetCursorPosition();
+						GetSet_LoopTimeRange(true, true, &startLoop, &endLoop, false); // set looping section start and end points
+						SetEditCurPos(initCursorPos, false, false);
+					}
+					else if (g_extEditMode == EXT_EDIT_TEMPO) {
+						if (value <= 63) {
+							Main_OnCommand(41129, 0); // Increase project tempo by 1bpm
+						}
+						else {
+							Main_OnCommand(41130, 0); // Decrease project tempo by 1bpm
+						}
+						this->_showTempoInMixer();
+					}
+					break;
+
+					// Copied Commands fron Normal Mode ================================================================================
+
+				case CMD_PLAY:
+					// Toggles between play and pause
+					CSurf_OnPlay();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_RESTART:
+					CSurf_GoStart();
+					if (GetPlayState() & ~1) {
+						// Only play if current state is not playing
+						// ToDo: also need to check if recording! Because otherwise we can end up playing from start while recording elsewhere on timeline!
+						CSurf_OnPlay();
+					}
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_COUNT:
+					Main_OnCommand(41745, 0); // Enable the metronome
+					this->_enableRecCountIn(); // Enable count-in for recording
+					CSurf_OnRecord();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_STOP:
+					CSurf_OnStop();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_TEMPO:
+					Main_OnCommand(1134, 0); // Transport: Tap tempo
+					break;
+					// ToDo: Consider also exiting Extended Edit
+				case CMD_UNDO:
+					Main_OnCommand(40029, 0); // Edit: Undo
+					// ToDo: Consider also exiting Extended Edit
+					break;
+				case CMD_REDO:
+					Main_OnCommand(40030, 0); // Edit: Redo
+					// ToDo: Consider also exiting Extended Edit
+					break;
+				case CMD_QUANTIZE:
+					Main_OnCommand(42033, 0); // Toggle input quantize for selected track
+					Main_OnCommand(40604, 0); // Open window showing track record settings
+					// ToDo: Can we close the windows by e.g. SetCursorContext()?
+					// ToDo: Consider indicating quantize state on keyboard by flashing button light. However, polling not CPU efficient...
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_AUTO:
+					this->_onSelAutoToggle();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_NAV_TRACKS:
+					// Value is -1 or 1.
+					this->_onTrackNav(convertSignedMidiValue(value));
+					break;
+				case CMD_NAV_BANKS:
+					// Value is -1 or 1.
+					this->_onBankSelect(convertSignedMidiValue(value));
+					break;
+				case CMD_NAV_CLIPS:
+					// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
+					// Value is -1 or 1.
+					Main_OnCommand(value == 1 ?
+						40173 : // Markers: Go to next marker/project end
+						40172, // Markers: Go to previous marker/project start
+						0);
+					break;
+				case CMD_MOVE_LOOP:
+					if (value <= 63) {
+						Main_OnCommand(40038, 0); // Shift time selection right (by its own length)
+					}
+					else {
+						Main_OnCommand(40037, 0); // Shift time selection left (by its own length)
+					}
+					break;
+				case CMD_TRACK_SELECTED:
+					// Select a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackSelect(value);
+					break;
+				case CMD_TRACK_MUTED:
+					// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackMute(value);
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_TRACK_SOLOED:
+					// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+					this->_onTrackSolo(value);
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_KNOB_VOLUME0:
+				case CMD_KNOB_VOLUME1:
+				case CMD_KNOB_VOLUME2:
+				case CMD_KNOB_VOLUME3:
+				case CMD_KNOB_VOLUME4:
+				case CMD_KNOB_VOLUME5:
+				case CMD_KNOB_VOLUME6:
+				case CMD_KNOB_VOLUME7:
+					this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_KNOB_PAN0:
+				case CMD_KNOB_PAN1:
+				case CMD_KNOB_PAN2:
+				case CMD_KNOB_PAN3:
+				case CMD_KNOB_PAN4:
+				case CMD_KNOB_PAN5:
+				case CMD_KNOB_PAN6:
+				case CMD_KNOB_PAN7:
+					this->_onKnobPanChange(command, convertSignedMidiValue(value));
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_TOGGLE_SEL_TRACK_MUTE:
+					this->_onSelTrackMute();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				case CMD_TOGGLE_SEL_TRACK_SOLO:
+					this->_onSelTrackSolo();
+					g_extEditMode = EXT_EDIT_OFF;
+					break;
+				default:
+#ifdef BASIC_DIAGNOSTICS
+					ostringstream s;
+					s << "Unhandled MIDI message " << showbase << hex
+						<< (int)event->midi_message[0] << " "
+						<< (int)event->midi_message[1] << " "
+						<< (int)event->midi_message[2] << endl;
+					ShowConsoleMsg(s.str().c_str());
+#endif
+					break;
+				}
 			}
 		}
 	}
