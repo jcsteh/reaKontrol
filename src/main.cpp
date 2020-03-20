@@ -127,7 +127,7 @@ void BaseSurface::Run() {
 	MIDI_eventlist* list = this->_midiIn->GetReadBuf();
 	MIDI_event_t* evt;
 	int i = 0;
-	while (evt = list->EnumItems(&i)) {
+	while ((evt = list->EnumItems(&i))) {
 		this->_onMidiEvent(evt);
 	}
 }
