@@ -124,14 +124,20 @@ static int log_scanAttempts = 0;
 static int log_connectAttempts = 0;
 # endif
 
+//on OSX, the device seems to be called different
+#ifdef __APPLE__
+const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
+#else
 const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
+#endif
+
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
 const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
 
 int getKkMidiInput() {
 	int count = GetNumMIDIInputs();
 	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
+		char name[60];
 		bool present = GetMIDIInputName(dev, name, sizeof(name));
 		if (!present) {
 			continue;
@@ -148,7 +154,7 @@ int getKkMidiInput() {
 int getKkMidiOutput() {
 	int count = GetNumMIDIOutputs();
 	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
+		char name[60];
 		bool present = GetMIDIOutputName(dev, name, sizeof(name));
 		if (!present) {
 			continue;
