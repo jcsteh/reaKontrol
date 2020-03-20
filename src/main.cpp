@@ -7,12 +7,29 @@
  * License: GNU General Public License version 2.0
  */
 
-#include <windows.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <SetupAPI.h>
 #include <initguid.h>
 #include <Usbiodef.h>
+
+#else
+
+#include <sys/types.h>
+#include <sys/time.h>
+
+typedef unsigned int DWORD;
+
+DWORD GetTickCount()
+{
+  // could switch to mach_getabsolutetime() maybe
+  struct timeval tm={0,};
+  gettimeofday(&tm,NULL);
+  return (DWORD) (tm.tv_sec*1000 + tm.tv_usec/1000);
+}
+
 #endif
+
 #include <string>
 #include <cstring>
 #define REAPERAPI_IMPLEMENT
@@ -110,7 +127,7 @@ void BaseSurface::Run() {
 	MIDI_eventlist* list = this->_midiIn->GetReadBuf();
 	MIDI_event_t* evt;
 	int i = 0;
-	while (evt = list->EnumItems(&i)) {
+	while ((evt = list->EnumItems(&i))) {
 		this->_onMidiEvent(evt);
 	}
 }
