@@ -21,11 +21,11 @@
 - The sequence in which new features are published may be different between this fork and the upstream repository due to possibly different priorities
 - The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
 
-## Build instructions
+## Windows Build instructions
 - Please refer to the parent repository @ https://github.com/jcsteh/reaKontrol
 
 ## OSX Build instructions
-
+Contibuted by Björn Kalkbrenner: https://github.com/terminar
 If you haven't done this before, get the "Command Line Tools for Xcode" and git (via https://brew.sh/ - Homebrew?).
 
 - git clone https://github.com/jcsteh/reaKontrol.git
