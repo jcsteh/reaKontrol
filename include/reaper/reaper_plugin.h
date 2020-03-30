@@ -46,7 +46,9 @@ typedef double ReaSample;
 #define REAPER_PLUGIN_HINSTANCE HINSTANCE
 
 #else
-#include "../../WDL/swell/swell.h"
+//we have to use git submodule to get the code from
+//https://github.com/justinfrankel/WDL (which puts WDL additionally to the path)
+#include "../../WDL/WDL/swell/swell.h"
 #include <pthread.h>
 
 #define REAPER_PLUGIN_DLL_EXPORT __attribute__((visibility("default")))
