@@ -9,7 +9,9 @@
 
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 // ToDo: Cleanup REAPERAPI WANT list
 #define REAPERAPI_MINIMAL

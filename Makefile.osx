@@ -1,0 +1,31 @@
+
+# reaKontrol OSX build Makefile
+# Author: Björn Kalkbrenner <terminar@cyberphoria.org>
+# License: GNU General Public License version 2.0
+
+INCLUDES=-Iinclude
+DEFINES=-D__APPLE__ #-DCONNECTION_DIAGNOSTICS
+CFLAGS=-std=c++11 -shared $(INCLUDES) $(DEFINES)
+SRC=src/main.cpp src/niMidi.cpp
+BIN=build/reaper_kontrol.dylib
+INSTPATH=$${HOME}/Library/Application\ Support/REAPER/UserPlugins
+
+all: clean reaper_kontrol
+
+clean:
+	@test -e "${BIN}" && rm "${BIN}" ; exit 0
+	@echo "Clean."
+
+reaper_kontrol: src/main.cpp src/niMidi.cpp
+	@test -e "WDL" || git submodule update
+	@test -e "build" || mkdir -p build
+	@g++ $(CFLAGS) $(SRC) -o "${BIN}" && echo "Compile finished successfully." || echo "Compile failed"
+
+install: reaper_kontrol
+	@test -e $(INSTPATH) && \
+	cp ${BIN} $(INSTPATH) && \
+	echo "reaKontrol installed successfully." || \
+	echo "Error, $(INSTPATH) doesn't exist, install failed"
+
+deinstall:
+	@test -e $(INSTPATH)/reaper_kontrol.dylib && rm $(INSTPATH)/reaper_kontrol.dylib && echo "Deinstall successful." || echo "Deinstall failed"
