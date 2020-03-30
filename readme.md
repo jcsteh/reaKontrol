@@ -29,7 +29,7 @@ Contibuted by Björn Kalkbrenner: https://github.com/terminar
 
 If you haven't done this before, get the "Command Line Tools for Xcode" and git (via https://brew.sh/ - Homebrew?).
 
-- git clone https://github.com/jcsteh/reaKontrol.git
+- git clone https://github.com/brummbrum/reaKontrol.git
 - cd reaKontrol
 - make -f Makefile.osx install
 
