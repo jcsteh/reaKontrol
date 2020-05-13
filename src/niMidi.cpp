@@ -215,11 +215,11 @@ static unsigned char volToChar_KkMk2(double volume) {
 }
 
 // ==============================================================================================================================
-// ToDo: Callback vs polling Architecture. The approach here is to use a callback architecture when possible and poll only if
+// Architectural Note: Callback vs polling Architecture. The approach here is to use a callback architecture when possible and poll only if
 // callbacks are not available or behave inefficiently or do not report reliably
 // Some Reaper callbacks (Set....) are called unecessarily (?) often in Reaper, see various forum reports & comments from schwa
-// => Consider state checking statements at beginning of every callback to return immediately if call is not necessary -> save CPU
 // Notably this thread: https://forum.cockos.com/showthread.php?t=49536
+// => Implement state checking / looking for changes at beginning of every callback to return immediately if call is not necessary -> save CPU
 // ==============================================================================================================================
 
 // ToDo: NIHIA shows a strange behaviour: The mixer view is sometimes not updated completely until any of the following 
@@ -282,9 +282,8 @@ class NiMidiSurface: public BaseSurface {
 						this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
 						if (this->_midiOut) {
 							this->_midiIn->start();
-							BaseSurface::Run();
 							g_connectedState = KK_MIDI_FOUND;
-							scanTimer = SCAN_T - 15; // Wait 0.5 seconds to give NIHIA more time to respond
+							scanTimer = SCAN_T;
 						}
 					}
 				}
@@ -292,7 +291,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_MIDI_FOUND) {
 			/*----------------- Try to connect and initialize -----------------*/
-			BaseSurface::Run();
 			scanTimer += 1;
 			if (scanTimer >= SCAN_T) {
 #ifdef CONNECTION_DIAGNOSTICS
@@ -328,6 +326,7 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
+			BaseSurface::Run();
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
@@ -795,7 +794,6 @@ class NiMidiSurface: public BaseSurface {
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
-			// ToDo: Add debugging/analyzer option to investigate additional MIDI messages (e.g. when NIHIA communicates with Maschine)
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
@@ -829,6 +827,7 @@ class NiMidiSurface: public BaseSurface {
 #ifdef CONNECTION_DIAGNOSTICS
 				ShowMessageBox("Komplete Kontrol Keyboard connected", "ReaKontrol", 0);
 #endif
+				return;
 			}
 		}
 
