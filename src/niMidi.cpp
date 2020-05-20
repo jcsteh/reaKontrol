@@ -291,6 +291,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_MIDI_FOUND) {
 			/*----------------- Try to connect and initialize -----------------*/
+			BaseSurface::Run();
 			scanTimer += 1;
 			if (scanTimer >= SCAN_T) {
 #ifdef CONNECTION_DIAGNOSTICS
@@ -326,7 +327,6 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
-			BaseSurface::Run();
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
