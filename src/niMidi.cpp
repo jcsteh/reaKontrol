@@ -547,6 +547,8 @@ class NiMidiSurface: public BaseSurface {
 		this->_metronomeUpdate(); // check if metronome status has changed on project tab change
 	}
 
+	// ToDo: If a track has Solo_Defeat activated the lights in the Mixer are not always updated correctly when navigating
+
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
 		// Use this callback for:
 		// - changed track selection and KK instance focus
@@ -703,6 +705,8 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}
 	}
+
+	// ToDo: If a track has Solo_Defeat activated the lights in the Mixer are not always updated correctly when navigating
 		
 	virtual void SetSurfaceSolo(MediaTrack* track, bool solo) override {
 #ifdef CALLBACK_DIAGNOSTICS
