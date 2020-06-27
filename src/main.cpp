@@ -32,10 +32,13 @@ DWORD GetTickCount()
 
 #include <string>
 #include <cstring>
+#include <sstream>
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 
 using namespace std;
+
+aList g_actionList; // Global action list structure for ReaKontrol
 
 const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
@@ -103,6 +106,63 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 		if (rec->caller_version != REAPER_PLUGIN_VERSION || !rec->GetFunc || REAPERAPI_LoadAPI(rec->GetFunc) != 0) {
 			return 0; // Incompatible.
 		}
+
+		// Load Global Action list from config file
+		const char* pathname = GetResourcePath();
+	    std::string s_filename(pathname);
+		s_filename += "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini";
+		s_filename.push_back('\0');
+		pathname = &s_filename[0];
+		if (file_exists(pathname)) {
+			std::string s_keyName;
+			char* key;
+			char stringOut[128] = {}; // large enough for the longest possible action ID or action name
+			int stringOut_sz = sizeof(stringOut);
+			
+			for (int i = 0; i <= 7; ++i) {
+				s_keyName = "action_" + std::to_string(i) + "_ID";
+				s_keyName.push_back('\0');
+				key = &s_keyName[0];
+				GetPrivateProfileString("reakontrol_actions", key, nullptr, stringOut, stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+				if (stringOut) {
+					g_actionList.ID[i] = NamedCommandLookup(stringOut);
+					if (g_actionList.ID[i]) {
+						s_keyName = "action_" + std::to_string(i) + "_name";
+						s_keyName.push_back('\0');
+						key = &s_keyName[0];
+						GetPrivateProfileString("reakontrol_actions", key, nullptr, stringOut, stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+						if (stringOut) {
+							strcpy(&g_actionList.name[i][0], stringOut);
+						}
+						else {
+							g_actionList.name[i][0] = '\0';
+						}
+					}
+				}
+				else {
+					g_actionList.ID[i] = 0;
+					g_actionList.name[i][0] = '\0';
+				}
+
+			}
+			// DEBUG
+			ostringstream s;
+			for (int i = 0; i <= 7; ++i) {
+				if (g_actionList.ID[i] != 0) {
+					s.str("");
+					s << "Action " << i << " " << g_actionList.ID[i] << " ";
+					ShowConsoleMsg(s.str().c_str());
+					if (g_actionList.name[i][0] != '\0') {
+						ShowConsoleMsg(g_actionList.name[i]);
+					}
+					ShowConsoleMsg("\n");
+				}
+			}
+		}
+		else {
+			ShowConsoleMsg("Message from ReaKontrol extension: \nConfiguration file not found: reakontrol.ini");
+		}
+
 		surface = createNiMidiSurface();
 		rec->Register("csurf_inst", (void*)surface);
 		return 1;

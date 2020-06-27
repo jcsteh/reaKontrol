@@ -1054,8 +1054,9 @@ class NiMidiSurface: public BaseSurface {
 					break;
 				case CMD_PLAY_CLIP:
 					if (g_extEditMode == EXT_EDIT_ON) {
-						// ExtEdit: Insert track
-						Main_OnCommand(40001, 0); // Insert Track
+						// ExtEdit: Global Action List
+						// TODO: Enter Global Action Selection provided that reacontrol.ini was found and actions are defined
+						Main_OnCommand(g_actionList.ID[0], 0); // JUST testing
 						SetTrackListChange();
 					}
 					else {
