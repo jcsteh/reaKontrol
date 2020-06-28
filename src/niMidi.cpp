@@ -112,6 +112,7 @@ const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode
 const int EXT_EDIT_ON = 1; // Extended Edit 1st stage commands
 const int EXT_EDIT_LOOP = 2; // Extended Edit LOOP
 const int EXT_EDIT_TEMPO = 3; // Extended Edit TEMPO
+const int EXT_EDIT_ACTIONS = 4; // Extended Edit ACTIONS
 static int g_extEditMode = EXT_EDIT_OFF;
 
 // Connection Status State Variables
@@ -330,7 +331,7 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
-			if (g_extEditMode == EXT_EDIT_OFF) {
+			if ((g_extEditMode == EXT_EDIT_OFF) || (g_extEditMode == EXT_EDIT_ACTIONS)) {
 				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
 					this->_extEditButtonUpdate();
 					lightOn = false;
@@ -458,7 +459,9 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
-			this->_peakMixerUpdate(); // Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
+			if (g_extEditMode != EXT_EDIT_ACTIONS) {
+				this->_peakMixerUpdate();
+			}
 			BaseSurface::Run();
 		}
 	}
@@ -1054,15 +1057,18 @@ class NiMidiSurface: public BaseSurface {
 					break;
 				case CMD_PLAY_CLIP:
 					if (g_extEditMode == EXT_EDIT_ON) {
-						// ExtEdit: Global Action List
-						// TODO: Enter Global Action Selection provided that reacontrol.ini was found and actions are defined
-						Main_OnCommand(g_actionList.ID[0], 0); // JUST testing
-						SetTrackListChange();
+						g_extEditMode = EXT_EDIT_ACTIONS;
+						this->_showActionList(); // ExtEdit: Global Action List
+					}
+					else if (g_extEditMode = EXT_EDIT_ACTIONS) {
+						this->_allMixerUpdate();
+						this->_peakMixerUpdate();
+						g_extEditMode = EXT_EDIT_OFF;
 					}
 					else {
 						_onRefocusBank();
+						g_extEditMode = EXT_EDIT_OFF;
 					}
-					g_extEditMode = EXT_EDIT_OFF;
 					break;
 				case CMD_STOP_CLIP:
 					// Exit Extended Edit Mode
@@ -1150,12 +1156,16 @@ class NiMidiSurface: public BaseSurface {
 					g_extEditMode = EXT_EDIT_OFF;
 					break;
 				case CMD_NAV_TRACKS:
-					// Value is -1 or 1.
-					this->_onTrackNav(convertSignedMidiValue(value));
+					// only navigate tracks when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackNav(convertSignedMidiValue(value));
+					}
 					break;
 				case CMD_NAV_BANKS:
-					// Value is -1 or 1.
-					this->_onBankSelect(convertSignedMidiValue(value));
+					// only navigate banks when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onBankSelect(convertSignedMidiValue(value));
+					}
 					break;
 				case CMD_NAV_CLIPS:
 					// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
@@ -1174,18 +1184,31 @@ class NiMidiSurface: public BaseSurface {
 					}
 					break;
 				case CMD_TRACK_SELECTED:
-					// Select a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackSelect(value);
+					if (g_extEditMode == EXT_EDIT_ACTIONS) {
+						// Execute custom action and restore mixer display afterwards
+						this->_callAction(value);
+						this->_allMixerUpdate();
+						this->_peakMixerUpdate();
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					else {
+						// Select a track from current bank in Mixer Mode with top row buttons
+						this->_onTrackSelect(value);
+					}					
 					break;
 				case CMD_TRACK_MUTED:
-					// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackMute(value);
-					g_extEditMode = EXT_EDIT_OFF;
+					// only when not in EXT_EDIT_ACTIONS mode: Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackMute(value);
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_TRACK_SOLOED:
-					// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackSolo(value);
-					g_extEditMode = EXT_EDIT_OFF;
+					// only when not in EXT_EDIT_ACTIONS mode: Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackSolo(value);
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_KNOB_VOLUME0:
 				case CMD_KNOB_VOLUME1:
@@ -1195,8 +1218,11 @@ class NiMidiSurface: public BaseSurface {
 				case CMD_KNOB_VOLUME5:
 				case CMD_KNOB_VOLUME6:
 				case CMD_KNOB_VOLUME7:
-					this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
-					g_extEditMode = EXT_EDIT_OFF;
+					// only change track volume when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+						g_extEditMode = EXT_EDIT_OFF;					
+					}					
 					break;
 				case CMD_KNOB_PAN0:
 				case CMD_KNOB_PAN1:
@@ -1206,8 +1232,11 @@ class NiMidiSurface: public BaseSurface {
 				case CMD_KNOB_PAN5:
 				case CMD_KNOB_PAN6:
 				case CMD_KNOB_PAN7:
-					this->_onKnobPanChange(command, convertSignedMidiValue(value));
-					g_extEditMode = EXT_EDIT_OFF;
+					// only change track pan when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onKnobPanChange(command, convertSignedMidiValue(value));
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_TOGGLE_SEL_TRACK_MUTE:
 					this->_onSelTrackMute();
@@ -1399,6 +1428,20 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}
+	}
+
+	void _showActionList() {
+		// TODO: Enter Global Action Selection provided that reacontrol.ini was found and actions are defined
+		// Main_OnCommand(g_actionList.ID[0], 0); // JUST testing
+		// SetTrackListChange();
+		// JUST A TEST
+		//for (int i = 0; i <= 7; ++i) {
+		//	this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+		//}
+	}
+
+	void _callAction(unsigned char actionSlot) {
+		// TODO
 	}
 
 	void _extEditButtonUpdate() {
