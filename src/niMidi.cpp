@@ -87,6 +87,10 @@ const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // Attention(!): NIHIA 1.8.7
 const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
 
 const unsigned char TRTYPE_UNSPEC = 1;
+const unsigned char TRTYPE_MIDI = 2;
+const unsigned char TRTYPE_AUDIO = 3;
+const unsigned char TRTYPE_GROUP = 4;
+const unsigned char TRTYPE_BUS = 5;
 const unsigned char TRTYPE_MASTER = 6;
 
 const bool HIDE_MUTED_BY_SOLO = false; // Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
@@ -108,11 +112,11 @@ static bool g_KKcountInTriggered = false; // to discriminate if COUNT IN was req
 static int g_KKcountInMetroState = 0; // to store metronome state when COUNT IN was requested by keyboard
 
 // Extended Edit Control State Variables
-const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode
+const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode. flashTimer = -1 
 const int EXT_EDIT_ON = 1; // Extended Edit 1st stage commands
 const int EXT_EDIT_LOOP = 2; // Extended Edit LOOP
 const int EXT_EDIT_TEMPO = 3; // Extended Edit TEMPO
-const int EXT_EDIT_ACTIONS = 4; // Extended Edit ACTIONS
+const int EXT_EDIT_ACTIONS = 4; // Extended Edit ACTIONS. flashTimer = -4
 static int g_extEditMode = EXT_EDIT_OFF;
 
 // Connection Status State Variables
@@ -260,7 +264,7 @@ class NiMidiSurface: public BaseSurface {
 		static int outDev = -1;
 				
 		static bool lightOn = false;
-		static int flashTimer = -1;
+		static int flashTimer = -1; // EXT_EDIT_OFF: flashTimer = -1, EXT_EDIT_ACTIONS: flashTimer = -4
 		static int cycleTimer = -1;
 		static int cyclePos = 0;
 
@@ -331,9 +335,10 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
-			if ((g_extEditMode == EXT_EDIT_OFF) || (g_extEditMode == EXT_EDIT_ACTIONS)) {
+			if (g_extEditMode == EXT_EDIT_OFF) {
 				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
 					this->_extEditButtonUpdate();
+					this->_allMixerUpdate();
 					lightOn = false;
 					flashTimer = -1;
 					cycleTimer = -1;
@@ -457,6 +462,15 @@ class NiMidiSurface: public BaseSurface {
 						lightOn = true;
 						this->_sendCc(CMD_METRO, 1);
 					}
+				}
+			}
+			else if (g_extEditMode == EXT_EDIT_ACTIONS) {
+				if (flashTimer != -4) {
+					this->_extEditButtonUpdate();
+					lightOn = false;
+					flashTimer = -4;
+					cycleTimer = -1;
+					cyclePos = 0;
 				}
 			}
 			if (g_extEditMode != EXT_EDIT_ACTIONS) {
@@ -1431,17 +1445,49 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _showActionList() {
-		// TODO: Enter Global Action Selection provided that reacontrol.ini was found and actions are defined
-		// Main_OnCommand(g_actionList.ID[0], 0); // JUST testing
-		// SetTrackListChange();
-		// JUST A TEST
-		//for (int i = 0; i <= 7; ++i) {
-		//	this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
-		//}
+		static char clearPeak[(BANK_NUM_TRACKS * 2) + 1] = { 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0 };
+		this->_sendCc(CMD_NAV_BANKS, 0);
+		for (int i = 0; i <= 7; ++i) {
+			if (g_actionList.ID[i]) {
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MIDI, i);
+				this->_sendSysex(CMD_TRACK_SOLOED, 1, i);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED, 0, i);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, i);
+				this->_sendSysex(CMD_TRACK_SELECTED, 0, i);
+				if (g_actionList.name[i][0] == '\0') {
+					this->_sendSysex(CMD_TRACK_NAME, 0, i, "NAME?");
+				}
+				else {
+					this->_sendSysex(CMD_TRACK_NAME, 0, i, &g_actionList.name[i][0]);
+				}
+				this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, i, "Action");
+				this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, i, "Action");
+				this->_sendCc((CMD_KNOB_VOLUME0 + i), 1);
+				this->_sendCc((CMD_KNOB_PAN0 + i), 63);
+			}
+			else {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED, 0, i);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, i);
+				this->_sendSysex(CMD_TRACK_SELECTED, 0, i);
+				this->_sendSysex(CMD_TRACK_NAME, 0, i, "");
+				this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, i, " ");
+				this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, i, " ");
+				this->_sendCc((CMD_KNOB_VOLUME0 + i), 1);
+				this->_sendCc((CMD_KNOB_PAN0 + i), 63);
+			}
+		}
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, clearPeak);
 	}
 
 	void _callAction(unsigned char actionSlot) {
-		// TODO
+		if (g_actionList.ID[actionSlot]) {
+			Main_OnCommand(g_actionList.ID[actionSlot], 0);
+			// SetTrackListChange(); // TBD is this necessary? or call SetSurfaceSelected or whatever may have changed?
+		}		
 	}
 
 	void _extEditButtonUpdate() {
