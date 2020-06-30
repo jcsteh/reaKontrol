@@ -1156,7 +1156,7 @@ class NiMidiSurface: public BaseSurface {
 						g_extEditMode = EXT_EDIT_ACTIONS;
 						this->_showActionList(); // ExtEdit: Global Action List
 					}
-					else if (g_extEditMode = EXT_EDIT_ACTIONS) {
+					else if (g_extEditMode == EXT_EDIT_ACTIONS) {
 						this->_allMixerUpdate();
 						this->_peakMixerUpdate();
 						g_extEditMode = EXT_EDIT_OFF;
