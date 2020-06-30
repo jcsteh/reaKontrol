@@ -4,6 +4,7 @@
 - Fork of the excellent ReaKontrol repository originally published by James Teh: https://github.com/jcsteh/reaKontrol
 - Fork Author: brumbear@pacificpeaks
 - Fork Copyright: 2019-2020 Pacific Peaks Studio, see individual copyrights in source code
+- OSX contributions by Björn Kalkbrenner: https://github.com/terminar
 - License: GNU General Public License version 2.0.
 - License Notes: As the original work is published under GPLv2 the modified programs are also licensed under GPLv2. May be updated to GPLv3 if copyright holder of original work agrees to update too.
 
@@ -21,17 +22,52 @@
 - The sequence in which new features are published may be different between this fork and the upstream repository due to possibly different priorities
 - The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
 
-## Windows Build instructions
-- Please refer to the parent repository @ https://github.com/jcsteh/reaKontrol
+## Building
+This section is for those interested in building ReaKontrol from source code.
+The build instructions have changed from the parent repository, this section will reflect these changes,
+cmake is now used for better cross platform maintenance and syntax highlighting + support in IDEs (and less dependencies).
 
-## OSX Build instructions
-Contibuted by Björn Kalkbrenner: https://github.com/terminar
+### Getting the Source Code
+The ReaKontrol Git repository is located at https://github.com/brummbrum/reaKontrol.git.
+You can clone it with the following command, which will place files in a directory named reaKontrol:
 
-If you haven't done this before, get the "Command Line Tools for Xcode" and git (via https://brew.sh/ - Homebrew?).
+```
+git clone https://github.com/brummbrum/reaKontrol.git
+```
 
-- git clone https://github.com/brummbrum/reaKontrol.git --recursive
-- cd reaKontrol
-- make -f Makefile.osx install
+### Dependencies
+To build ReaKontrol, you will need:
 
-If you just want to compile the shared library and copy it yourself, you can just do `make -f Makefile.osx`, 
-the resulting reaper_kontrol.dylib can be found in the `build` directory.
+- CMake, version 3.12 or later:
+    * [Download CMake](https://cmake.org/download/)
+
+#### Specific Windows dependencies
+
+- Microsoft Visual Studio 2017 Community:
+    * Visual Studio 2019 is not yet supported.
+    * [Download Visual Studio 2017 Community](https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&rel=15)
+    * When installing Visual Studio, you need to enable the following:
+        - On the Workloads tab, in the Windows group: Desktop development with C++
+
+#### Specific OSX dependencies
+
+- Command Line Tools for Xcode
+
+### How to Build (regardless if you are using Windows or OSX)
+To build ReaKontrol, from a command prompt, change to the ReaKontrol checkout directory and run the following commands:
+```
+cd build
+cmake ..
+cmake --build . --config Release
+```
+The resulting dll can be found in the `build/bin/Release` directory (Windows) and `build/lib` (OSX).
+
+### How to Install
+If you have followed the build steps, you can attach the last command:
+```
+cmake --build . --target install
+```
+The rea_kontrol.dll is then copied to your
+- Win32: %APPDATA%/Reaper/UserPlugins
+- OSX: $home/Library/Application Support/Reaper/UserPlugins
+ folder.
