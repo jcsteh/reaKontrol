@@ -32,6 +32,7 @@ DWORD GetTickCount()
 
 #include <string>
 #include <cstring>
+#include <sstream>
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 

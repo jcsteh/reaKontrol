@@ -87,6 +87,10 @@ const unsigned char CMD_SEL_TRACK_AVAILABLE = 0x68; // Attention(!): NIHIA 1.8.7
 const unsigned char CMD_SEL_TRACK_MUTED_BY_SOLO = 0x69; // Attention(!): NIHIA 1.8.7 used SysEx, NIHIA 1.8.8 uses Cc
 
 const unsigned char TRTYPE_UNSPEC = 1;
+const unsigned char TRTYPE_MIDI = 2;
+const unsigned char TRTYPE_AUDIO = 3;
+const unsigned char TRTYPE_GROUP = 4;
+const unsigned char TRTYPE_BUS = 5;
 const unsigned char TRTYPE_MASTER = 6;
 
 const bool HIDE_MUTED_BY_SOLO = false; // Meter Setting: If TRUE peak levels will not be shown in Mixer view of muted by solo tracks. If FALSE they will be shown but greyed out.
@@ -108,10 +112,11 @@ static bool g_KKcountInTriggered = false; // to discriminate if COUNT IN was req
 static int g_KKcountInMetroState = 0; // to store metronome state when COUNT IN was requested by keyboard
 
 // Extended Edit Control State Variables
-const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode
+const int EXT_EDIT_OFF = 0; // no Extended Edit, Normal Mode. flashTimer = -1 
 const int EXT_EDIT_ON = 1; // Extended Edit 1st stage commands
 const int EXT_EDIT_LOOP = 2; // Extended Edit LOOP
 const int EXT_EDIT_TEMPO = 3; // Extended Edit TEMPO
+const int EXT_EDIT_ACTIONS = 4; // Extended Edit ACTIONS. flashTimer = -4
 static int g_extEditMode = EXT_EDIT_OFF;
 
 // Connection Status State Variables
@@ -119,12 +124,20 @@ const int KK_NOT_CONNECTED = 0; // not connected / scanning
 const int KK_MIDI_FOUND = 1; // KK MIDI device found / trying to connect to NIHIA
 const int KK_NIHIA_CONNECTED = 2; // NIHIA HELLO acknowledged / fully connected
 static int g_connectedState = KK_NOT_CONNECTED; 
+
 # ifdef CONNECTION_DIAGNOSTICS
 static int log_scanAttempts = 0;
 static int log_connectAttempts = 0;
 # endif
 
-//on OSX, the device seems to be called different
+// Global action list structure for ReaKontrol
+struct aList {
+	int ID[8];
+	char name[8][128];
+};
+aList g_actionList;
+bool g_actionListLoaded = false; // action list will be populated from ini file after successful connection to allow Reaper main thread to load all extensions first
+
 #ifdef __APPLE__
 const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
 #else
@@ -133,6 +146,75 @@ const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
 const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
+
+
+void loadActionList() {
+	// Load Global Action list from config file
+	const char* pathname = GetResourcePath();
+	std::string s_filename(pathname);
+	s_filename += "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini";
+	s_filename.push_back('\0');
+	pathname = &s_filename[0];
+	if (file_exists(pathname)) {
+		std::string s_keyName;
+		char* key;
+		char stringOut[128] = {}; // large enough for the longest possible action ID or action name
+		int stringOut_sz = sizeof(stringOut);
+
+		for (int i = 0; i <= 7; ++i) {
+			s_keyName = "action_" + std::to_string(i) + "_ID";
+			s_keyName.push_back('\0');
+			key = &s_keyName[0];
+			GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+			if (stringOut[0] != '\0') {
+				g_actionList.ID[i] = NamedCommandLookup(&stringOut[0]);
+				if (g_actionList.ID[i]) {
+					s_keyName = "action_" + std::to_string(i) + "_name";
+					s_keyName.push_back('\0');
+					key = &s_keyName[0];
+					GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+					if (stringOut[0] != '\0') {
+						strcpy(&g_actionList.name[i][0], &stringOut[0]);
+					}
+					else {
+						g_actionList.name[i][0] = '\0';
+					}
+				}
+			}
+			else {
+				g_actionList.ID[i] = 0;
+				g_actionList.name[i][0] = '\0';
+			}
+
+		}
+
+#ifdef DEBUG_DIAGNOSTICS
+		ostringstream s;
+		for (int i = 0; i <= 7; ++i) {
+			if (g_actionList.ID[i] != 0) {
+				s.str("");
+				s << "Action " << i << " " << g_actionList.ID[i] << " ";
+				ShowConsoleMsg(s.str().c_str());
+				if (g_actionList.name[i][0] != '\0') {
+					ShowConsoleMsg(g_actionList.name[i]);
+				}
+				ShowConsoleMsg("\n");
+			}
+		}
+#endif
+
+	}
+	else {
+		ostringstream s;
+		s << "Komplete Kontrol Keyboard successfully connected but configuration file not found! Please read manual how to configure custom actions via the configuration file:"
+			<< endl << endl
+			<< s_filename;
+		ShowMessageBox(s.str().c_str(), "ReaKontrol", 0);
+		g_actionList.ID[0] = -1;
+	}
+}
+
+
 
 int getKkMidiInput() {
 	int count = GetNumMIDIInputs();
@@ -259,7 +341,7 @@ class NiMidiSurface: public BaseSurface {
 		static int outDev = -1;
 				
 		static bool lightOn = false;
-		static int flashTimer = -1;
+		static int flashTimer = -1; // EXT_EDIT_OFF: flashTimer = -1, EXT_EDIT_ACTIONS: flashTimer = -4
 		static int cycleTimer = -1;
 		static int cyclePos = 0;
 
@@ -330,9 +412,15 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
+			if (!g_actionListLoaded) {
+				loadActionList();
+				g_actionListLoaded = true;
+			}
+		
 			if (g_extEditMode == EXT_EDIT_OFF) {
 				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
 					this->_extEditButtonUpdate();
+					this->_allMixerUpdate();
 					lightOn = false;
 					flashTimer = -1;
 					cycleTimer = -1;
@@ -458,7 +546,18 @@ class NiMidiSurface: public BaseSurface {
 					}
 				}
 			}
-			this->_peakMixerUpdate(); // Moved from main to deal with activities specific to S-Mk2/A/M series and not applicable to S-Mk1 keyboards
+			else if (g_extEditMode == EXT_EDIT_ACTIONS) {
+				if (flashTimer != -4) {
+					this->_extEditButtonUpdate();
+					lightOn = false;
+					flashTimer = -4;
+					cycleTimer = -1;
+					cyclePos = 0;
+				}
+			}
+			if (g_extEditMode != EXT_EDIT_ACTIONS) {
+				this->_peakMixerUpdate();
+			}
 			BaseSurface::Run();
 		}
 	}
@@ -1054,14 +1153,18 @@ class NiMidiSurface: public BaseSurface {
 					break;
 				case CMD_PLAY_CLIP:
 					if (g_extEditMode == EXT_EDIT_ON) {
-						// ExtEdit: Insert track
-						Main_OnCommand(40001, 0); // Insert Track
-						SetTrackListChange();
+						g_extEditMode = EXT_EDIT_ACTIONS;
+						this->_showActionList(); // ExtEdit: Global Action List
+					}
+					else if (g_extEditMode = EXT_EDIT_ACTIONS) {
+						this->_allMixerUpdate();
+						this->_peakMixerUpdate();
+						g_extEditMode = EXT_EDIT_OFF;
 					}
 					else {
 						_onRefocusBank();
+						g_extEditMode = EXT_EDIT_OFF;
 					}
-					g_extEditMode = EXT_EDIT_OFF;
 					break;
 				case CMD_STOP_CLIP:
 					// Exit Extended Edit Mode
@@ -1149,12 +1252,16 @@ class NiMidiSurface: public BaseSurface {
 					g_extEditMode = EXT_EDIT_OFF;
 					break;
 				case CMD_NAV_TRACKS:
-					// Value is -1 or 1.
-					this->_onTrackNav(convertSignedMidiValue(value));
+					// only navigate tracks when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackNav(convertSignedMidiValue(value));
+					}
 					break;
 				case CMD_NAV_BANKS:
-					// Value is -1 or 1.
-					this->_onBankSelect(convertSignedMidiValue(value));
+					// only navigate banks when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onBankSelect(convertSignedMidiValue(value));
+					}
 					break;
 				case CMD_NAV_CLIPS:
 					// ToDo: Consider to also update the 4D encoder LEDs depending on marker presence and playhead position
@@ -1173,18 +1280,31 @@ class NiMidiSurface: public BaseSurface {
 					}
 					break;
 				case CMD_TRACK_SELECTED:
-					// Select a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackSelect(value);
+					if (g_extEditMode == EXT_EDIT_ACTIONS) {
+						// Execute custom action and restore mixer display afterwards
+						this->_callAction(value);
+						this->_allMixerUpdate();
+						this->_peakMixerUpdate();
+						g_extEditMode = EXT_EDIT_OFF;
+					}
+					else {
+						// Select a track from current bank in Mixer Mode with top row buttons
+						this->_onTrackSelect(value);
+					}					
 					break;
 				case CMD_TRACK_MUTED:
-					// Toggle mute for a a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackMute(value);
-					g_extEditMode = EXT_EDIT_OFF;
+					// only when not in EXT_EDIT_ACTIONS mode: Toggle mute for a a track from current bank in Mixer Mode with top row buttons
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackMute(value);
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_TRACK_SOLOED:
-					// Toggle solo for a a track from current bank in Mixer Mode with top row buttons
-					this->_onTrackSolo(value);
-					g_extEditMode = EXT_EDIT_OFF;
+					// only when not in EXT_EDIT_ACTIONS mode: Toggle solo for a a track from current bank in Mixer Mode with top row buttons
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onTrackSolo(value);
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_KNOB_VOLUME0:
 				case CMD_KNOB_VOLUME1:
@@ -1194,8 +1314,11 @@ class NiMidiSurface: public BaseSurface {
 				case CMD_KNOB_VOLUME5:
 				case CMD_KNOB_VOLUME6:
 				case CMD_KNOB_VOLUME7:
-					this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
-					g_extEditMode = EXT_EDIT_OFF;
+					// only change track volume when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+						g_extEditMode = EXT_EDIT_OFF;					
+					}					
 					break;
 				case CMD_KNOB_PAN0:
 				case CMD_KNOB_PAN1:
@@ -1205,8 +1328,11 @@ class NiMidiSurface: public BaseSurface {
 				case CMD_KNOB_PAN5:
 				case CMD_KNOB_PAN6:
 				case CMD_KNOB_PAN7:
-					this->_onKnobPanChange(command, convertSignedMidiValue(value));
-					g_extEditMode = EXT_EDIT_OFF;
+					// only change track pan when not in EXT_EDIT_ACTIONS mode
+					if (g_extEditMode != EXT_EDIT_ACTIONS) {
+						this->_onKnobPanChange(command, convertSignedMidiValue(value));
+						g_extEditMode = EXT_EDIT_OFF;
+					}					
 					break;
 				case CMD_TOGGLE_SEL_TRACK_MUTE:
 					this->_onSelTrackMute();
@@ -1398,6 +1524,56 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText); // NIHIA v1.8.7.135 uses internal text
 			this->_sendCc((CMD_KNOB_PAN0 + numInBank), panToChar(pan));
 		}
+	}
+
+	void _showActionList() {
+		static char clearPeak[(BANK_NUM_TRACKS * 2) + 1] = { 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0 };
+		this->_sendCc(CMD_NAV_BANKS, 0);
+		for (int i = 0; i <= 7; ++i) {
+			if (g_actionList.ID[i] > 0) {
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MIDI, i);
+				this->_sendSysex(CMD_TRACK_SOLOED, 1, i);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED, 0, i);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, i);
+				this->_sendSysex(CMD_TRACK_SELECTED, 0, i);
+				if (g_actionList.name[i][0] == '\0') {
+					this->_sendSysex(CMD_TRACK_NAME, 0, i, "NAME?");
+				}
+				else {
+					this->_sendSysex(CMD_TRACK_NAME, 0, i, &g_actionList.name[i][0]);
+				}
+				this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, i, "Action");
+				this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, i, "Action");
+				this->_sendCc((CMD_KNOB_VOLUME0 + i), 1);
+				this->_sendCc((CMD_KNOB_PAN0 + i), 63);
+			}
+			else {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, i);
+				this->_sendSysex(CMD_TRACK_MUTED, 0, i);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, i);
+				this->_sendSysex(CMD_TRACK_SELECTED, 0, i);
+				this->_sendSysex(CMD_TRACK_NAME, 0, i, "");
+				this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, i, " ");
+				this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, i, " ");
+				this->_sendCc((CMD_KNOB_VOLUME0 + i), 1);
+				this->_sendCc((CMD_KNOB_PAN0 + i), 63);
+			}
+		}
+		if (g_actionList.ID[0] == -1) {
+			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MIDI, 0);
+			this->_sendSysex(CMD_TRACK_NAME, 0, 0, "Config file not found!");
+		}
+		this->_sendSysex(CMD_TRACK_VU, 2, 0, clearPeak);
+	}
+
+	void _callAction(unsigned char actionSlot) {
+		if (g_actionList.ID[actionSlot]) {
+			Main_OnCommand(g_actionList.ID[actionSlot], 0);
+			// SetTrackListChange(); // TBD is this necessary? or call SetSurfaceSelected or whatever may have changed?
+		}		
 	}
 
 	void _extEditButtonUpdate() {
