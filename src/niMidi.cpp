@@ -124,12 +124,20 @@ const int KK_NOT_CONNECTED = 0; // not connected / scanning
 const int KK_MIDI_FOUND = 1; // KK MIDI device found / trying to connect to NIHIA
 const int KK_NIHIA_CONNECTED = 2; // NIHIA HELLO acknowledged / fully connected
 static int g_connectedState = KK_NOT_CONNECTED; 
+
 # ifdef CONNECTION_DIAGNOSTICS
 static int log_scanAttempts = 0;
 static int log_connectAttempts = 0;
 # endif
 
-//on OSX, the device seems to be called different
+// Global action list structure for ReaKontrol
+struct aList {
+	int ID[8];
+	char name[8][128];
+};
+aList g_actionList;
+bool g_actionListLoaded = false; // action list will be populated from ini file after successful connection to allow Reaper main thread to load all extensions first
+
 #ifdef __APPLE__
 const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
 #else
@@ -138,6 +146,75 @@ const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
 const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
+
+
+void loadActionList() {
+	// Load Global Action list from config file
+	const char* pathname = GetResourcePath();
+	std::string s_filename(pathname);
+	s_filename += "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini";
+	s_filename.push_back('\0');
+	pathname = &s_filename[0];
+	if (file_exists(pathname)) {
+		std::string s_keyName;
+		char* key;
+		char stringOut[128] = {}; // large enough for the longest possible action ID or action name
+		int stringOut_sz = sizeof(stringOut);
+
+		for (int i = 0; i <= 7; ++i) {
+			s_keyName = "action_" + std::to_string(i) + "_ID";
+			s_keyName.push_back('\0');
+			key = &s_keyName[0];
+			GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+			if (stringOut[0] != '\0') {
+				g_actionList.ID[i] = NamedCommandLookup(&stringOut[0]);
+				if (g_actionList.ID[i]) {
+					s_keyName = "action_" + std::to_string(i) + "_name";
+					s_keyName.push_back('\0');
+					key = &s_keyName[0];
+					GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+					if (stringOut[0] != '\0') {
+						strcpy(&g_actionList.name[i][0], &stringOut[0]);
+					}
+					else {
+						g_actionList.name[i][0] = '\0';
+					}
+				}
+			}
+			else {
+				g_actionList.ID[i] = 0;
+				g_actionList.name[i][0] = '\0';
+			}
+
+		}
+
+#ifdef DEBUG_DIAGNOSTICS
+		ostringstream s;
+		for (int i = 0; i <= 7; ++i) {
+			if (g_actionList.ID[i] != 0) {
+				s.str("");
+				s << "Action " << i << " " << g_actionList.ID[i] << " ";
+				ShowConsoleMsg(s.str().c_str());
+				if (g_actionList.name[i][0] != '\0') {
+					ShowConsoleMsg(g_actionList.name[i]);
+				}
+				ShowConsoleMsg("\n");
+			}
+		}
+#endif
+
+	}
+	else {
+		ostringstream s;
+		s << "Komplete Kontrol Keyboard successfully connected but configuration file not found! Please read manual how to configure custom actions via the configuration file:"
+			<< endl << endl
+			<< s_filename;
+		ShowMessageBox(s.str().c_str(), "ReaKontrol", 0);
+		g_actionList.ID[0] = -1;
+	}
+}
+
+
 
 int getKkMidiInput() {
 	int count = GetNumMIDIInputs();
@@ -335,6 +412,11 @@ class NiMidiSurface: public BaseSurface {
 		}
 		else if (g_connectedState == KK_NIHIA_CONNECTED) {
 			/*----------------- We are successfully connected -----------------*/
+			if (!g_actionListLoaded) {
+				loadActionList();
+				g_actionListLoaded = true;
+			}
+		
 			if (g_extEditMode == EXT_EDIT_OFF) {
 				if (flashTimer != -1) { // are we returning from one of the Extended Edit Modes?
 					this->_extEditButtonUpdate();
@@ -1448,7 +1530,7 @@ class NiMidiSurface: public BaseSurface {
 		static char clearPeak[(BANK_NUM_TRACKS * 2) + 1] = { 2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0 };
 		this->_sendCc(CMD_NAV_BANKS, 0);
 		for (int i = 0; i <= 7; ++i) {
-			if (g_actionList.ID[i]) {
+			if (g_actionList.ID[i] > 0) {
 				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MIDI, i);
 				this->_sendSysex(CMD_TRACK_SOLOED, 1, i);
 				this->_sendSysex(CMD_TRACK_MUTED_BY_SOLO, 0, i);
@@ -1479,6 +1561,10 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendCc((CMD_KNOB_VOLUME0 + i), 1);
 				this->_sendCc((CMD_KNOB_PAN0 + i), 63);
 			}
+		}
+		if (g_actionList.ID[0] == -1) {
+			this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_MIDI, 0);
+			this->_sendSysex(CMD_TRACK_NAME, 0, 0, "Config file not found!");
 		}
 		this->_sendSysex(CMD_TRACK_VU, 2, 0, clearPeak);
 	}

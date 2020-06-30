@@ -78,14 +78,6 @@
 #include <reaper/reaper_plugin_functions.h>
 #include <reaper/WDL/db2val.h>
 
-// Global action list structure for ReaKontrol
-struct aList {
-	int ID[8];
-	char name[8][128];
-};
-
-extern aList g_actionList; // make available to other parts of code
-
 const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {
