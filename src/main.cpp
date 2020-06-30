@@ -32,6 +32,7 @@ DWORD GetTickCount()
 
 #include <string>
 #include <cstring>
+#include <sstream>
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 
@@ -40,45 +41,6 @@ using namespace std;
 const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
-/*
-const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
-const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
-const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
-
-int getKkMidiInput() {
-	int count = GetNumMIDIInputs();
-	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
-		bool present = GetMIDIInputName(dev, name, sizeof(name));
-		if (!present) {
-			continue;
-		}
-		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0
-				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
-			return dev;
-		}
-	}
-	return -1;
-}
-
-int getKkMidiOutput() {
-	int count = GetNumMIDIOutputs();
-	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
-		bool present = GetMIDIOutputName(dev, name, sizeof(name));
-		if (!present) {
-			continue;
-		}
-		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0
-				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
-			return dev;
-		}
-	}
-	return -1;
-}
-*/
 
 const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
