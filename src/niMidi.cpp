@@ -139,9 +139,11 @@ aList g_actionList;
 bool g_actionListLoaded = false; // action list will be populated from ini file after successful connection to allow Reaper main thread to load all extensions first
 
 #ifdef __APPLE__
-const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
+    #define REAKONTROL_INI "/UserPlugins/ReaKontrolConfig/reakontrol.ini"
+    const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
 #else
-const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
+    #define REAKONTROL_INI "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini"
+    const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 #endif
 
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
@@ -152,7 +154,7 @@ void loadActionList() {
 	// Load Global Action list from config file
 	const char* pathname = GetResourcePath();
 	std::string s_filename(pathname);
-	s_filename += "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini";
+	s_filename += REAKONTROL_INI;
 	s_filename.push_back('\0');
 	pathname = &s_filename[0];
 	if (file_exists(pathname)) {
