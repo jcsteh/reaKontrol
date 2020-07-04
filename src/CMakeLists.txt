@@ -46,19 +46,17 @@ add_library(reakontrol SHARED
 
 target_link_libraries(reakontrol ${reakontrol_LIBS})
 
-target_include_directories(reakontrol
-    PUBLIC ${CMAKE_SOURCE_DIR}/include
-)
+target_include_directories(reakontrol PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
 set_target_properties(reakontrol PROPERTIES PREFIX "")
 set_target_properties(reakontrol PROPERTIES OUTPUT_NAME "reaper_kontrol")
 
 if (CMAKE_BUILD_TYPE MATCHES DEBUG)
-    add_definitions(-DCONNECTION_DIAGNOSTICS -DDEBUG_DIAGNOSTICS -DCALLBACK_DIAGNOSTICS -DCALLBACK_DIAGNOSTICS)
+    add_definitions(-DCALLBACK_DIAGNOSTICS -DCONNECTION_DIAGNOSTICS -DDEBUG_DIAGNOSTICS -DBASIC_DIAGNOSTICS)
 endif()
 
 if(WIN32)
-    set(REAPER_USERPLUGINS "Reaper\\UserPlugins")
+    set(REAPER_USERPLUGINS "REAPER\\UserPlugins")
 elseif(APPLE)
     set(REAPER_USERPLUGINS "Application Support/Reaper/UserPlugins")
 endif()

@@ -1,4 +1,4 @@
-![alt text](ReaKontrol_v093pp.png?raw=true)
+![alt text](ReaKontrol_v100.png?raw=true)
 
 # ReaKontrol
 - Fork of the excellent ReaKontrol repository originally published by James Teh: https://github.com/jcsteh/reaKontrol
@@ -15,12 +15,6 @@
 
 ## Manual
 - Can be found under releases: https://github.com/brummbrum/reaKontrol/releases
-
-## Upstream Integration into Parent Repository
-- New features may also be offered to the upstream repository @ https://github.com/jcsteh/reaKontrol
-- Some updated features may or may not be merged with the upstream master due to possibly different priorities
-- The sequence in which new features are published may be different between this fork and the upstream repository due to possibly different priorities
-- The parent repository also takes into account dependencies to OSARA relevant for users using screen readers.
 
 ## Building
 This section is for those interested in building ReaKontrol from source code.
@@ -53,14 +47,24 @@ To build ReaKontrol, you will need:
 
 - Command Line Tools for Xcode
 
-### How to Build (regardless if you are using Windows or OSX)
+### How to build on Windows with VS 2017
 To build ReaKontrol, from a command prompt, change to the ReaKontrol checkout directory and run the following commands:
 ```
 cd build
-cmake ..
+cmake .. -A x64
 cmake --build . --config Release
 ```
-The resulting dll can be found in the `build/bin/Release` directory (Windows) and `build/lib` (OSX).
+The resulting dll can be found in the `build/bin/Release` directory (Windows)
+Note: If you are still building for Reaper x86 32bit specify -A x86 as target architecture above.
+
+### How to build on OSX
+To build ReaKontrol, from a command prompt, change to the ReaKontrol checkout directory and run the following commands:
+```
+cd build
+cmake .. 
+cmake --build . --config Release
+```
+The resulting dll can be found in the `build/lib` directory (OSX).
 
 ### How to Install
 If you have followed the build steps, you can attach the last command:
