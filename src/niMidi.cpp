@@ -140,6 +140,7 @@ aList g_actionList;
 bool g_actionListLoaded = false; // action list will be populated from ini file after successful connection to allow Reaper main thread to load all extensions first
 
 #ifdef __APPLE__
+    #define strcpy_s(dest,dest_sz, src) strlcpy(dest,src, dest_sz)
     #define REAKONTROL_INI "/UserPlugins/ReaKontrolConfig/reakontrol.ini"
     const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
 #else
