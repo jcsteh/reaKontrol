@@ -131,17 +131,20 @@ static int log_connectAttempts = 0;
 # endif
 
 // Global action list structure for ReaKontrol
+const int A_NAME_MAX = 128;
 struct aList {
 	int ID[8];
-	char name[8][128];
+	char name[8][A_NAME_MAX];
 };
 aList g_actionList;
 bool g_actionListLoaded = false; // action list will be populated from ini file after successful connection to allow Reaper main thread to load all extensions first
 
 #ifdef __APPLE__
-const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
+    #define REAKONTROL_INI "/UserPlugins/ReaKontrolConfig/reakontrol.ini"
+    const char KKS_DEVICE_NAME[] = "Bome Software GmbH & Co. KG - Komplete Kontrol DAW - 1";
 #else
-const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
+    #define REAKONTROL_INI "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini"
+    const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
 #endif
 
 const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
@@ -152,13 +155,13 @@ void loadActionList() {
 	// Load Global Action list from config file
 	const char* pathname = GetResourcePath();
 	std::string s_filename(pathname);
-	s_filename += "\\UserPlugins\\ReaKontrolConfig\\reakontrol.ini";
+	s_filename += REAKONTROL_INI;
 	s_filename.push_back('\0');
 	pathname = &s_filename[0];
 	if (file_exists(pathname)) {
 		std::string s_keyName;
 		char* key;
-		char stringOut[128] = {}; // large enough for the longest possible action ID or action name
+		char stringOut[A_NAME_MAX] = {}; // large enough for the longest possible action ID or action name
 		int stringOut_sz = sizeof(stringOut);
 
 		for (int i = 0; i <= 7; ++i) {
@@ -174,7 +177,7 @@ void loadActionList() {
 					key = &s_keyName[0];
 					GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
 					if (stringOut[0] != '\0') {
-						strcpy(&g_actionList.name[i][0], &stringOut[0]);
+						strcpy_s(&g_actionList.name[i][0], A_NAME_MAX, &stringOut[0]);
 					}
 					else {
 						g_actionList.name[i][0] = '\0';
