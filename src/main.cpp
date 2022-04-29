@@ -38,7 +38,8 @@ DWORD GetTickCount()
 
 using namespace std;
 
-const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_VST_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_VST3_PREFIX[] = "VST3i: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
 
@@ -46,9 +47,10 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
 	for (int fx = 0; fx < fxCount; ++fx) {
 		// Find the Komplete Kontrol FX.
-		char fxName[sizeof(KK_FX_PREFIX)];
+		char fxName[sizeof(KK_VST3_PREFIX)];
 		TrackFX_GetFXName(track, fx, fxName, sizeof(fxName));
-		if (strcmp(fxName, KK_FX_PREFIX) != 0) {
+		if (strcmp(fxName, KK_VST_PREFIX) != 0 &&
+				strcmp(fxName, KK_VST3_PREFIX) != 0) {
 			continue;
 		}
 		// Check for the instance name.
