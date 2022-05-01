@@ -160,6 +160,17 @@ void loadActionList() {
 	s_filename += REAKONTROL_INI;
 	s_filename.push_back('\0');
 	pathname = &s_filename[0];
+	if (!file_exists(pathname)) {
+		WritePrivateProfileString("reakontrol_actions", "action_0_id", "40001", pathname); // Windows only. Mac OSX via Swell version of this
+		if (!WritePrivateProfileString("reakontrol_actions", "action_0_name", "Insert Default Track", pathname)) {
+			ostringstream s;
+			s << "Unable to write configuration file! Please read manual, subfolder must exist for the configuration file:"
+				<< endl << endl
+				<< s_filename;
+			ShowMessageBox(s.str().c_str(), "ReaKontrol", 0);
+			g_actionList.ID[0] = -1;
+		}
+	}
 	if (file_exists(pathname)) {
 		std::string s_keyName;
 		char* key;
@@ -170,14 +181,14 @@ void loadActionList() {
 			s_keyName = "action_" + std::to_string(i) + "_ID";
 			s_keyName.push_back('\0');
 			key = &s_keyName[0];
-			GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+			GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this
 			if (stringOut[0] != '\0') {
 				g_actionList.ID[i] = NamedCommandLookup(&stringOut[0]);
 				if (g_actionList.ID[i]) {
 					s_keyName = "action_" + std::to_string(i) + "_name";
 					s_keyName.push_back('\0');
 					key = &s_keyName[0];
-					GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this?
+					GetPrivateProfileString("reakontrol_actions", key, nullptr, &stringOut[0], stringOut_sz, pathname); // Windows only. Mac OSX via Swell version of this
 					if (stringOut[0] != '\0') {
 						strcpy_s(&g_actionList.name[i][0], A_NAME_MAX, &stringOut[0]);
 					}
