@@ -58,14 +58,26 @@ The resulting dll can be found in the `build/bin/Release` directory (Windows)
 Note: If you are still building for Reaper x86 32bit specify -A x86 as target architecture above.
 
 ### How to build on OSX
+#### Intel x86 based Mac
 To build ReaKontrol, from a command prompt, change to the ReaKontrol checkout directory and run the following commands:
 ```
 cd build
 cmake .. 
 cmake --build . --config Release
 ```
-The resulting dll can be found in the `build/lib` directory (OSX).
+The resulting dylib can be found in the `build/lib` directory (OSX).
 
+#### ARM based Mac
+First, comment out 'set(CMAKE_OSX_ARCHITECTURES x86_64)' in 'CMakeLists.txt'. Then build as described above.
+
+Both ARM and x86 binaries can reside in parallel and load depending on Rosetta settings by naming them like this:
+
+```
+ls ~/Library/Application\ Support/REAPER/UserPlugins
+
+reaper_kontrol-x86_64.dylib
+reaper_kontrol.dylib
+```
 ### How to Install
 If you have followed the build steps, you can attach the last command:
 ```

@@ -23,6 +23,7 @@ elseif(APPLE)
     include(FetchContent)
     FetchContent_Declare(WDL
         GIT_REPOSITORY  https://github.com/justinfrankel/WDL.git
+        GIT_TAG main
         SOURCE_DIR "${CMAKE_SOURCE_DIR}/WDL"
     )
     FetchContent_MakeAvailable(WDL)
