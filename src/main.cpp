@@ -21,9 +21,11 @@
 
 using namespace std;
 
-const char KKS_DEVICE_NAME[] = "Komplete Kontrol DAW - 1";
-const char KKA_DEVICE_NAME[] = "Komplete Kontrol A DAW";
-const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
+const char* KK_DEVICE_NAME_SUFFIXES[] = {
+	"Komplete Kontrol DAW - 1", // Mk1 and Mk2
+	"Komplete Kontrol A DAW",
+	"Komplete Kontrol M DAW",
+};
 const char KKMK1_HWID_PREFIX[] = "USB\\VID_17CC&PID_";
 const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
@@ -34,15 +36,16 @@ const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 int getKkMidiInput() {
 	int count = GetNumMIDIInputs();
 	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
-		bool present = GetMIDIInputName(dev, name, sizeof(name));
+		char rawName[50];
+		const bool present = GetMIDIInputName(dev, rawName, sizeof(rawName));
 		if (!present) {
 			continue;
 		}
-		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0
-				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
-			return dev;
+		const string_view name(rawName);
+		for (const char* suffix: KK_DEVICE_NAME_SUFFIXES) {
+			if (name.ends_with(suffix)) {
+				return dev;
+			}
 		}
 	}
 	return -1;
@@ -51,15 +54,16 @@ int getKkMidiInput() {
 int getKkMidiOutput() {
 	int count = GetNumMIDIOutputs();
 	for (int dev = 0; dev < count; ++dev) {
-		char name[30];
-		bool present = GetMIDIOutputName(dev, name, sizeof(name));
+		char rawName[50];
+		const bool present = GetMIDIOutputName(dev, rawName, sizeof(rawName));
 		if (!present) {
 			continue;
 		}
-		if (strcmp(name, KKS_DEVICE_NAME) == 0
-				|| strcmp(name, KKA_DEVICE_NAME) == 0
-				|| strcmp(name, KKM_DEVICE_NAME) == 0) {
-			return dev;
+		const string_view name(rawName);
+		for (const char* suffix: KK_DEVICE_NAME_SUFFIXES) {
+			if (name.ends_with(suffix)) {
+				return dev;
+			}
 		}
 	}
 	return -1;
