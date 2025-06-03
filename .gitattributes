@@ -6,3 +6,4 @@
 sconstruct text
 sconscript text
 *.md text
+*.yml text
