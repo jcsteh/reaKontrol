@@ -6,14 +6,16 @@
  * License: GNU General Public License version 2.0
  */
 
-#include <windows.h>
-#ifdef _WIN32
-#include <SetupAPI.h>
-#include <initguid.h>
-#include <Usbiodef.h>
-#endif
-#include <string>
 #include <cstring>
+#include <string>
+#ifdef _WIN32
+#include <windows.h>
+#include <initguid.h>
+#include <SetupAPI.h>
+#include <Usbiodef.h>
+#else
+#include "swell.h"
+#endif
 #define REAPERAPI_IMPLEMENT
 #include "reaKontrol.h"
 
