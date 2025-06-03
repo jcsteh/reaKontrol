@@ -269,7 +269,7 @@ class NiMidiSurface: public BaseSurface {
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
 			// todo: volume text, pan text
-			char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+			const char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
 			}

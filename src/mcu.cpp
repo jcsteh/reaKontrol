@@ -82,7 +82,7 @@ class McuSurface: public BaseSurface {
 			return;
 		}
 		string message((char*)MIDI_SYSEX_BEGIN, sizeof(MIDI_SYSEX_BEGIN));
-		char* trackName = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+		const char* trackName = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 		if (!trackName || !trackName[0]) {
 			trackName = "unnamed";
 		}
