@@ -1,0 +1,56 @@
+# Build and upload ReaKontrol for pushes or pull requests.
+name: build
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize]
+defaults:
+  run:
+    shell: bash
+env:
+  VSCMD_SKIP_SENDTELEMETRY: 1
+  SCONS_CACHE_MSVC_CONFIG: 1
+concurrency:
+  # There's no point continuing to run a build if it's already outdated by
+  # another commit.
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: set env
+        run: |
+          echo "CACHE_KEY=${RUNNER_OS}-${ImageVersion}" >> $GITHUB_ENV
+          if [ ${{ matrix.os }} == windows-latest ]; then
+            echo os=windows >> "$GITHUB_ENV"
+          else
+            echo os=mac >> "$GITHUB_ENV"
+          fi
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      # There's no point in building if we're going to fail the build because of
+      # an unsorted key map, so we do this as early as we can.
+      - name: setup
+        run: pip install scons
+      - name: SCons MSVC Cache
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: actions/cache@v4
+        with:
+          path: ~\scons_msvc_cache.json
+          key: ${{ env.CACHE_KEY }}
+      - name: build
+        run: scons
+      - name: upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: reaKontrol_${{ env.os }}
+          path: |
+            build/reaper_kontrol.dll
+            build/reaper_kontrol.dylib
