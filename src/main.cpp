@@ -27,7 +27,8 @@ const char KKM_DEVICE_NAME[] = "Komplete Kontrol M DAW";
 const char KKMK1_HWID_PREFIX[] = "USB\\VID_17CC&PID_";
 const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
-const char KK_FX_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_VST_PREFIX[] = "VSTi: Komplete Kontrol";
+const char KK_VST3_PREFIX[] = "VST3i: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
 int getKkMidiInput() {
@@ -107,9 +108,11 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
 	for (int fx = 0; fx < fxCount; ++fx) {
 		// Find the Komplete Kontrol FX.
-		char fxName[sizeof(KK_FX_PREFIX)];
-		TrackFX_GetFXName(track, fx, fxName, sizeof(fxName));
-		if (strcmp(fxName, KK_FX_PREFIX) != 0) {
+		char rawFxName[sizeof(KK_VST3_PREFIX)];
+		TrackFX_GetFXName(track, fx, rawFxName, sizeof(rawFxName));
+		const string_view fxName(rawFxName, sizeof(rawFxName));
+		if (!fxName.starts_with(KK_VST_PREFIX) &&
+				!fxName.starts_with(KK_VST3_PREFIX)) {
 			continue;
 		}
 		// Check for the instance name.
