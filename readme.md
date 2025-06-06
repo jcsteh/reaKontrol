@@ -11,7 +11,7 @@
 ReaKontrol is a [REAPER](https://www.reaper.fm/) extension which provides advanced host integration for [Native Instruments Komplete Kontrol keyboards](https://www.native-instruments.com/en/products/komplete/keyboards/).
 It runs on both Windows and Mac and requires REAPER 5.92 or later.
 
-ReaKontrol supports Komplete Kontrol S-series Mk2, A-series and M-series keyboards.
+ReaKontrol supports Komplete Kontrol S-series Mk2, S-series Mk3, A-series and M-series keyboards.
 While some initial work has been done to support S-series Mk1 keyboards, this is not yet functional.
 
 ## Supported Functionality

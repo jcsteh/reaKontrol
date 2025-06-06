@@ -25,6 +25,13 @@ const char* KK_DEVICE_NAME_SUFFIXES[] = {
 	"Komplete Kontrol DAW - 1", // Mk1 and Mk2
 	"Komplete Kontrol A DAW",
 	"Komplete Kontrol M DAW",
+#ifdef _WIN32
+	"2 (KONTROL S49 MK3)", // e.g. MIDIIN2(KONTROL S49 MK3)
+	"2 (KONTROL S61 MK3)",
+	"2 (KONTROL S88 MK3)",
+#else
+	"MK3 - DAW", // e.g. Native Instruments - KONTROL S61 MK3 - DAW
+#endif
 };
 const char KKMK1_HWID_PREFIX[] = "USB\\VID_17CC&PID_";
 const size_t USB_PID_LEN = 4;
