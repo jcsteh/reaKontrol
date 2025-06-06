@@ -1,5 +1,9 @@
 # ReaKontrol
 
+<!--beginDownload-->
+[Downloads available on the ReaKontrol website](https://reakontrol.jantrid.net/)
+<!--endDownload-->
+
 - Author: James Teh &lt;jamie@jantrid.net&gt; & other contributors
 - Copyright: 2018-2025 James Teh & other contributors
 - License: GNU General Public License version 2.0
@@ -23,7 +27,7 @@ The following functionality is currently supported:
 
 ## Download and Installation
 For now, there is no installer.
-You can [download the latest build of the extension here](https://osara.reaperaccessibility.com/reaper_kontrol.dll).
+You can download the latest build using the links at the top of this page.
 
 Once downloaded, simply copy the `reaper_kontrol.dll` file you downloaded to the `%appdata%\REAPER\UserPlugins` folder using Windows File Explorer.
 You can get to this folder by copying the name above and pasting it into either the Windows Run dialog or the File Explorer address bar.

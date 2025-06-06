@@ -27,6 +27,13 @@ jobs:
       - name: set env
         run: |
           echo "CACHE_KEY=${RUNNER_OS}-${ImageVersion}" >> $GITHUB_ENV
+          if [ $GITHUB_EVENT_NAME == push ]; then
+            # For example: 2025.6.5.11,7041fcb6
+            echo version=`date +%Y.%-m.%-d`.$GITHUB_RUN_NUMBER,${GITHUB_SHA:0:8} >> "$GITHUB_ENV"
+          else
+            # For example: pr1234-101,7041fcb6
+            echo version=pr${{ github.event.number }}-$GITHUB_RUN_NUMBER,${GITHUB_SHA:0:8} >> "$GITHUB_ENV"
+          fi
           if [ ${{ matrix.os }} == windows-latest ]; then
             echo os=windows >> "$GITHUB_ENV"
           else
@@ -35,8 +42,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      # There's no point in building if we're going to fail the build because of
-      # an unsorted key map, so we do this as early as we can.
       - name: setup
         run: pip install scons
       - name: SCons MSVC Cache
@@ -47,10 +52,65 @@ jobs:
           key: ${{ env.CACHE_KEY }}
       - name: build
         run: scons
-      - name: upload build
+      # Normal artifacts are always zipped. We upload snapshot builds to GitHub
+      # Releases so they can be downloaded directly.
+      - name: zip Windows
+        if: ${{ github.event_name == 'push' && matrix.os == 'windows-latest' }}
+        run: cd build; 7z a -tzip -mx=9 reaKontrol_windows_$version.zip reaper_kontrol.dll
+      - name: zip Mac
+        if: ${{ github.event_name == 'push' && matrix.os == 'macos-latest' }}
+        run: cd build; zip -9 reaKontrol_mac_$version.zip reaper_kontrol.dylib
+      - id: uploadBuild
+        name: upload build
+        if: ${{ github.event_name == 'push' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.zip
+          # We have a hacky release we reuse for snapshots, rather than
+          # creating a tag and a release for every snapshot.
+          tag_name: snapshots
+      - id: getBuildUrl
+        name: get build URL
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          echo ${{ env.os }}Url=${{ fromJSON(steps.uploadBuild.outputs.assets)[0].browser_download_url }} >> "$GITHUB_OUTPUT"
+      # We upload pull request builds as normal artifacts.
+      - name: upload PR build
         uses: actions/upload-artifact@v4
         with:
-          name: reaKontrol_${{ env.os }}
+          name: reaKontrol_${{ env.os }}_${{ env.version }}
           path: |
             build/reaper_kontrol.dll
             build/reaper_kontrol.dylib
+    outputs:
+      version: ${{ env.version }}
+      # These will only be set for snapshot builds. Furthermore, each OS job
+      # will only set the output relevant to that OS. This is possible because
+      # outputs won't be set if the value is empty.
+      winInstallerUrl: ${{ steps.getBuildUrl.outputs.windowsUrl }}
+      macInstallerUrl: ${{ steps.getBuildUrl.outputs.macUrl }}
+  publish:
+    # This job updates the website with the new readme and snapshots.
+    if: ${{ github.event_name == 'push' }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - name: setup
+        run: pip install markdown
+      - uses: actions/checkout@v4
+      - name: build
+        env:
+          version: ${{ needs.build.outputs.version }}
+          winUrl: ${{ needs.build.outputs.winInstallerUrl }}
+          macUrl: ${{ needs.build.outputs.macInstallerUrl }}
+        run: python ci/buildSite
+      - name: upload
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # ci/buildSite built the site in _site/.
+          path: _site/
+      - name: deploy
+        uses: actions/deploy-pages@v4

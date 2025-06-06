@@ -1,0 +1,59 @@
+#!/usr/bin/python3
+
+# ReaKontrol
+# CI script to build the ReaKontrol website
+# Copyright 2025 James Teh
+# License: GNU General Public License version 2.0
+
+import datetime
+import os.path
+import re
+import sys
+
+import markdown
+
+SITE_DIR = "_site"
+INDEX_FILE = os.path.join(SITE_DIR, "index.html")
+
+def writeIndex(data):
+	print("Rendering index")
+	bodyMd = open("readme.md", "rt", encoding="utf-8").read()
+	# Replace the download placeholder with build download links.
+	bodyMd = re.sub(
+		'<!--beginDownload-->.*?<!--endDownload-->',
+		(
+			f"- Latest version: {data['version']}, {data['date']}\n"
+			f"- [Download for Windows]({data['winUrl']})\n"
+			f"- [Download for Mac]({data['macUrl']})\n"
+			f"- [Change log](https://github.com/jcsteh/reaKontrol/commits/{data['commit']})\n"
+			"---\n"
+		),
+		bodyMd,
+		flags=re.DOTALL
+	)
+	bodyHtml = markdown.markdown(bodyMd)
+	print("Writing index")
+	with open(INDEX_FILE, "w") as f:
+		f.write('<html>\n'
+			'<head>\n'
+			'<meta charset="UTF-8">\n'
+			'<title>ReaKontrol</title>\n'
+			'</head>\n'
+			'<body>\n')
+		f.write(bodyHtml)
+		f.write('\n</body>\n</html>\n')
+
+def main():
+	os.makedirs(SITE_DIR)
+	data = {
+		"commit": os.getenv("GITHUB_SHA"),
+		"version": os.getenv("version"),
+		"winUrl": os.getenv("winUrl"),
+		"macUrl": os.getenv("macUrl"),
+		"date": datetime.datetime.now(datetime.UTC).ctime(),
+	}
+	print("Publishing website for {data[version]}".format(data=data))
+	writeIndex(data)
+
+if __name__ == "__main__":
+	main()
