@@ -175,6 +175,44 @@ void BaseSurface::Run() {
 
 IReaperControlSurface* surface = nullptr;
 
+void connect() {
+	int inDev = getKkMidiInput();
+	if (inDev == -1) {
+		return;
+	}
+	int outDev = getKkMidiOutput();
+	if (outDev == -1) {
+		return;
+	}
+	if (isMk1Connected()) {
+		surface = createMcuSurface(inDev, outDev);
+	} else {
+		surface = createNiMidiSurface(inDev, outDev);
+	}
+	plugin_register("csurf_inst", (void*)surface);
+}
+
+void disconnect() {
+	if (surface) {
+		plugin_register("-csurf_inst", (void*)surface);
+		delete surface;
+		surface = nullptr;
+	}
+}
+
+int CMD_RECONNECT = 0;
+
+bool handleCommand(KbdSectionInfo* section, int command, int val, int valHw,
+	int relMode, HWND hwnd
+) {
+	if (command == CMD_RECONNECT) {
+		disconnect();
+		connect();
+		return true;
+	}
+	return false;
+}
+
 extern "C" {
 
 REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hInstance, reaper_plugin_info_t* rec) {
@@ -183,25 +221,16 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 		if (rec->caller_version != REAPER_PLUGIN_VERSION || !rec->GetFunc || REAPERAPI_LoadAPI(rec->GetFunc) != 0) {
 			return 0; // Incompatible.
 		}
-
-		int inDev = getKkMidiInput();
-		if (inDev != -1) {
-			int outDev = getKkMidiOutput();
-			if (outDev != -1) {
-				if (isMk1Connected()) {
-					surface = createMcuSurface(inDev, outDev);
-				} else {
-					surface = createNiMidiSurface(inDev, outDev);
-				}
-			}
-		}
-		rec->Register("csurf_inst", (void*)surface);
+		connect();
+		const int MAIN_SECTION = 0;
+		custom_action_register_t action = {MAIN_SECTION, "REAKONTROL_RECONNECT",
+			"ReaKontrol: Reconnect"};
+		CMD_RECONNECT = rec->Register("custom_action", &action);
+		rec->Register("hookcommand2", (void*)handleCommand);
 		return 1;
 	} else {
 		// Unload.
-		if (surface) {
-			delete surface;
-		}
+		disconnect();
 		return 0;
 	}
 }

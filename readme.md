@@ -36,6 +36,13 @@ On Mac, copy the `reaper_kontrol.dylib` file to the `Library/Application Support
 You do not need to add a control surface or perform any other configuration in REAPER.
 Komplete Kontrol Host integration should work as soon as you start REAPER with a Komplete Kontrol keyboard connected.
 
+## Reconnecting
+ReaKontrol will connect to a Kontrol keyboard when REAPER starts.
+If the keyboard isn't turned on or connected when REAPER starts, ReaKontrol is not currently able to detect when the keyboard is connected.
+This is also true if the keyboard is disconnected and then reconnected while REAPER is running.
+If this occurs, you can use the ReaKontrol: Reconnect action available in the REAPER actions list.
+This will make ReaKontrol reconnect to the keyboard without needing to restart REAPER.
+
 ## Reporting Issues
 Issues should be reported [on GitHub](https://github.com/jcsteh/reaKontrol/issues).
 
