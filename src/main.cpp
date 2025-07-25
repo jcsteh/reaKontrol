@@ -40,29 +40,11 @@ const char KK_VST_PREFIX[] = "VSTi: Komplete Kontrol";
 const char KK_VST3_PREFIX[] = "VST3i: Komplete Kontrol";
 const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
-int getKkMidiInput() {
-	int count = GetNumMIDIInputs();
+int getKkMidiDevice(auto countFunc, auto getFunc) {
+	int count = countFunc();
 	for (int dev = 0; dev < count; ++dev) {
 		char rawName[50];
-		const bool present = GetMIDIInputName(dev, rawName, sizeof(rawName));
-		if (!present) {
-			continue;
-		}
-		const string_view name(rawName);
-		for (const char* suffix: KK_DEVICE_NAME_SUFFIXES) {
-			if (name.ends_with(suffix)) {
-				return dev;
-			}
-		}
-	}
-	return -1;
-}
-
-int getKkMidiOutput() {
-	int count = GetNumMIDIOutputs();
-	for (int dev = 0; dev < count; ++dev) {
-		char rawName[50];
-		const bool present = GetMIDIOutputName(dev, rawName, sizeof(rawName));
+		const bool present = getFunc(dev, rawName, sizeof(rawName));
 		if (!present) {
 			continue;
 		}
@@ -176,11 +158,11 @@ void BaseSurface::Run() {
 IReaperControlSurface* surface = nullptr;
 
 void connect() {
-	int inDev = getKkMidiInput();
+	int inDev = getKkMidiDevice(GetNumMIDIInputs, GetMIDIInputName);
 	if (inDev == -1) {
 		return;
 	}
-	int outDev = getKkMidiOutput();
+	int outDev = getKkMidiDevice(GetNumMIDIOutputs, GetMIDIOutputName);
 	if (outDev == -1) {
 		return;
 	}
