@@ -7,6 +7,7 @@
  */
 
 #include <cstring>
+#include <regex>
 #include <string>
 #ifdef _WIN32
 #include <windows.h>
@@ -36,9 +37,6 @@ const char* KK_DEVICE_NAME_SUFFIXES[] = {
 const char KKMK1_HWID_PREFIX[] = "USB\\VID_17CC&PID_";
 const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
-const char KK_VST_PREFIX[] = "VSTi: Komplete Kontrol";
-const char KK_VST3_PREFIX[] = "VST3i: Komplete Kontrol";
-const char KK_INSTANCE_PARAM_PREFIX[] = "NIKB";
 
 int getKkMidiDevice(auto countFunc, auto getFunc) {
 	int count = countFunc();
@@ -100,26 +98,27 @@ bool isMk1Connected() {
 const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 	int fxCount = TrackFX_GetCount(track);
 	for (int fx = 0; fx < fxCount; ++fx) {
-		// Find the Komplete Kontrol FX.
-		char rawFxName[sizeof(KK_VST3_PREFIX)];
-		TrackFX_GetFXName(track, fx, rawFxName, sizeof(rawFxName));
-		const string_view fxName(rawFxName, sizeof(rawFxName));
-		if (!fxName.starts_with(KK_VST_PREFIX) &&
-				!fxName.starts_with(KK_VST3_PREFIX)) {
-			continue;
+		// Check for a matching instance name. For Komplete Kontrol, this will be the
+		// first parameter. For Kontakt, Maschine, etc., it is the last real
+		// parameter. However, REAPER appends a heap of MIDI control parameters, as
+		// well as the bypass, delta and wet parameters. Therefore, use a set of
+		// known parameter indices which will likely need to be updated in future.
+		for (int param : {0, 128, 2048, 4096}) {
+			// The focus follow ID always begins with the prefix NIXX (where XX are any
+			// alphabetical letters), and follows with a multiple digit instance number.
+			char paramName[15];
+			TrackFX_GetParamName(track, fx, param, paramName, sizeof(paramName));
+			static const regex RE_NAME("(NI[a-zA-Z]{2,})(\\d{2,})");
+			cmatch m;
+			regex_match(paramName, m, RE_NAME);
+			if (m.empty()) {
+				continue;
+			}
+			if (stripPrefix) {
+				return m.str(2);
+			}
+			return paramName;
 		}
-		// Check for the instance name.
-		// The first parameter should have a name in the form NIKBxx, where xx is a number.
-		char paramName[7];
-		TrackFX_GetParamName(track, fx, 0, paramName, sizeof(paramName));
-		const size_t prefixLen = sizeof(KK_INSTANCE_PARAM_PREFIX) - 1;
-		if (strncmp(paramName, KK_INSTANCE_PARAM_PREFIX, prefixLen) != 0) {
-			return "";
-		}
-		if (stripPrefix) {
-			return string(paramName).substr(prefixLen);
-		}
-		return paramName;
 	}
 	return "";
 }
