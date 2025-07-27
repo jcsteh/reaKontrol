@@ -108,14 +108,14 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 			// alphabetical letters), and follows with a multiple digit instance number.
 			char paramName[15];
 			TrackFX_GetParamName(track, fx, param, paramName, sizeof(paramName));
-			static const regex RE_NAME("(NI[a-zA-Z]{2,})(\\d{2,})");
+			static const regex RE_NAME("NI[a-zA-Z]{2,}(\\d{2,})");
 			cmatch m;
 			regex_match(paramName, m, RE_NAME);
 			if (m.empty()) {
 				continue;
 			}
 			if (stripPrefix) {
-				return m.str(2);
+				return m.str(1);
 			}
 			return paramName;
 		}
