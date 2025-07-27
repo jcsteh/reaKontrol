@@ -47,26 +47,26 @@ const unsigned char CMD_TRACK_SELECTED = 0x42;
 const unsigned char CMD_TRACK_MUTED = 0x43;
 const unsigned char CMD_TRACK_SOLOED = 0x44;
 const unsigned char CMD_TRACK_ARMED = 0x45;
-const unsigned char CMD_TRACK_VOLUME_CHANGED = 0x46;
-const unsigned char CMD_TRACK_PAN_CHANGED = 0x47;
+const unsigned char CMD_TRACK_VOLUME_TEXT = 0x46;
+const unsigned char CMD_TRACK_PAN_TEXT = 0x47;
 const unsigned char CMD_TRACK_NAME = 0x48;
 const unsigned char CMD_TRACK_VU = 0x49;
-const unsigned char CMD_KNOB_VOLUME1 = 0x50;
-const unsigned char CMD_KNOB_VOLUME2 = 0x51;
-const unsigned char CMD_KNOB_VOLUME3 = 0x52;
-const unsigned char CMD_KNOB_VOLUME4 = 0x53;
-const unsigned char CMD_KNOB_VOLUME5 = 0x54;
-const unsigned char CMD_KNOB_VOLUME6 = 0x55;
-const unsigned char CMD_KNOB_VOLUME7 = 0x56;
-const unsigned char CMD_KNOB_VOLUME8 = 0x57;
-const unsigned char CMD_KNOB_PAN1 = 0x58;
-const unsigned char CMD_KNOB_PAN2 = 0x59;
-const unsigned char CMD_KNOB_PAN3 = 0x5a;
-const unsigned char CMD_KNOB_PAN4 = 0x5b;
-const unsigned char CMD_KNOB_PAN5 = 0x5c;
-const unsigned char CMD_KNOB_PAN6 = 0x5d;
-const unsigned char CMD_KNOB_PAN7 = 0x5e;
-const unsigned char CMD_KNOB_PAN8 = 0x5f;
+const unsigned char CMD_KNOB_VOLUME0 = 0x50;
+const unsigned char CMD_KNOB_VOLUME1 = 0x51;
+const unsigned char CMD_KNOB_VOLUME2 = 0x52;
+const unsigned char CMD_KNOB_VOLUME3 = 0x53;
+const unsigned char CMD_KNOB_VOLUME4 = 0x54;
+const unsigned char CMD_KNOB_VOLUME5 = 0x55;
+const unsigned char CMD_KNOB_VOLUME6 = 0x56;
+const unsigned char CMD_KNOB_VOLUME7 = 0x57;
+const unsigned char CMD_KNOB_PAN0 = 0x58;
+const unsigned char CMD_KNOB_PAN1 = 0x59;
+const unsigned char CMD_KNOB_PAN2 = 0x5a;
+const unsigned char CMD_KNOB_PAN3 = 0x5b;
+const unsigned char CMD_KNOB_PAN4 = 0x5c;
+const unsigned char CMD_KNOB_PAN5 = 0x5d;
+const unsigned char CMD_KNOB_PAN6 = 0x5e;
+const unsigned char CMD_KNOB_PAN7 = 0x5f;
 const unsigned char CMD_CHANGE_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
@@ -207,6 +207,7 @@ class NiMidiSurface: public BaseSurface {
 				// Select a track from current bank in Mixer Mode with top row buttons
 				this->_onTrackSelect(value);
 				break;
+			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
 			case CMD_KNOB_VOLUME3:
@@ -214,9 +215,9 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
 			case CMD_KNOB_VOLUME7:
-			case CMD_KNOB_VOLUME8:
 				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
 				break;
+			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
 			case CMD_KNOB_PAN2:
 			case CMD_KNOB_PAN3:
@@ -224,7 +225,6 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN5:
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:
-			case CMD_KNOB_PAN8:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
@@ -311,7 +311,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME1;
+		int numInBank = command - CMD_KNOB_VOLUME0;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
 			return;
@@ -320,7 +320,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_PAN1;
+		int numInBank = command - CMD_KNOB_PAN0;
 		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
 		if (!track) {
 			return;
