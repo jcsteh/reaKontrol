@@ -7,8 +7,10 @@
  * License: GNU General Public License version 2.0
  */
 
+#include <algorithm>
 #include <string>
 #include <sstream>
+#include <WDL/db2val.h>
 #include <cstring>
 #include "reaKontrol.h"
 
@@ -81,6 +83,28 @@ signed char convertSignedMidiValue(unsigned char value) {
 		return value;
 	}
 	return value - 128;
+}
+
+unsigned char volToCc(double volume) {
+	// Based on:
+	// https://github.com/justinfrankel/reaper-sdk/blob/cde283eea2d82e19e473062649a95dc0e799fe37/reaper-plugins/reaper_csurf/csurf_01X.cpp#LL286
+	// CC values range from 0 to 127. DB2SLIDER returns a value from 0 to 1000.
+	double val = DB2SLIDER(VAL2DB(volume)) * 127.0 / 1000.0;
+	val = clamp(val, 0.0, 127.0);
+	// Round >= 0.5 up to 1.
+	return (unsigned char)(val + 0.5);
+}
+
+unsigned char panToCc(double pan) {
+	// Based on:
+	// https://github.com/justinfrankel/reaper-sdk/blob/cde283eea2d82e19e473062649a95dc0e799fe37/reaper-plugins/reaper_csurf/csurf_01X.cpp#LL295
+	// Pan ranges from -1 to 1, so add 1 to give us a range of 0 to 2. Then
+	// divide by 2 to give us a fraction of 1. Finally, CC values range from 0 to
+	// 127, so multiply to scale accordingly.
+	double val = (pan + 1.0) / 2.0 * 127.0;
+	val = clamp(val, 0.0, 127.0);
+	// Round >= 0.5 up to 1.
+	return (unsigned char)(val + 0.5);
 }
 
 class NiMidiSurface: public BaseSurface {
@@ -268,13 +292,22 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendSysex(CMD_TRACK_MUTED, muted ? 1 : 0, numInBank);
 			int armed = *(int*)GetSetMediaTrackInfo(track, "I_RECARM", nullptr);
 			this->_sendSysex(CMD_TRACK_ARMED, armed, numInBank);
-			// todo: volume text, pan text
+			double volume = *(double*)GetSetMediaTrackInfo(track, "D_VOL", nullptr);
+			char volText[64];
+			mkvolstr(volText, volume);
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, volText);
+			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
+			char panText[64];
+			mkpanstr(panText, pan);
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, volText);
 			const char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
 			}
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
-			// todo: level meters, volume, pan
+			// todo: level meters
+			this->_sendCc(CMD_KNOB_VOLUME0 + numInBank, volToCc(volume));
+			this->_sendCc(CMD_KNOB_PAN0 + numInBank, panToCc(pan));
 		}
 		// todo: navigate tracks, navigate banks
 	}
