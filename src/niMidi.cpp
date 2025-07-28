@@ -304,6 +304,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onBankChange() {
 		int numInBank = 0;
+		// bankEnd is exclusive; i.e. 1 beyond the last track in the bank.
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
 		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
 		// count the master, so add 1 to the count.
@@ -347,7 +348,17 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendCc(CMD_KNOB_VOLUME0 + numInBank, volToCc(volume));
 			this->_sendCc(CMD_KNOB_PAN0 + numInBank, panToCc(pan));
 		}
-		// todo: navigate tracks, navigate banks
+		// todo: navigate tracks
+		int bankLights = 0;
+		if (this->_bankStart > 0) {
+			// Bit 0: previous
+			bankLights |= 1;
+		}
+		if (bankEnd < numTracks) {
+			// Bit 1: next
+			bankLights |= 1 << 1;
+		}
+		this->_sendCc(CMD_NAV_BANKS, bankLights);
 	}
 
 	void ClearSelected() {
