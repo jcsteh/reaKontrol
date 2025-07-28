@@ -162,6 +162,11 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void SetTrackListChange() final {
+		// A track has been added or removed. Send updated bank info.
+		this->_onBankChange();
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
