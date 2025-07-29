@@ -162,6 +162,11 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void SetTrackListChange() final {
+		// A track has been added or removed. Send updated bank info.
+		this->_onBankChange();
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -273,8 +278,8 @@ class NiMidiSurface: public BaseSurface {
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			for (int i = BANK_NUM_TRACKS - 1; i > lastInBank; --i) {
+			const int firstUnavailable = numTracks % BANK_NUM_TRACKS;
+			for (int i = firstUnavailable; i < BANK_NUM_TRACKS; ++i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
 			}
 		}
