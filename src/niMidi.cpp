@@ -278,8 +278,8 @@ class NiMidiSurface: public BaseSurface {
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			for (int i = BANK_NUM_TRACKS - 1; i > lastInBank; --i) {
+			const int firstUnavailable = numTracks % BANK_NUM_TRACKS;
+			for (int i = firstUnavailable; i < BANK_NUM_TRACKS; ++i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
 			}
 		}
