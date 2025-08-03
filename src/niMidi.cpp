@@ -162,6 +162,11 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void SetTrackListChange() final {
+		// A track has been added or removed. Send updated bank info.
+		this->_onBankChange();
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -269,12 +274,14 @@ class NiMidiSurface: public BaseSurface {
 	void _onBankChange() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
+		// count the master, so add 1 to the count.
+		const int numTracks = CSurf_NumTracks(false) + 1;
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
-			int lastInBank = numTracks % BANK_NUM_TRACKS;
-			for (int i = BANK_NUM_TRACKS - 1; i > lastInBank; --i) {
+			const int firstUnavailable = numTracks % BANK_NUM_TRACKS;
+			for (int i = firstUnavailable; i < BANK_NUM_TRACKS; ++i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
 			}
 		}
