@@ -167,6 +167,26 @@ class NiMidiSurface: public BaseSurface {
 		this->_onBankChange();
 	}
 
+	void SetSurfaceVolume(MediaTrack* track, double volume) final {
+		const int numInBank = this->_getNumInBank(track);
+		if (numInBank != -1) {
+			char volText[64];
+			mkvolstr(volText, volume);
+			this->_sendSysex(CMD_TRACK_VOLUME_TEXT, 0, numInBank, volText);
+			this->_sendCc(CMD_KNOB_VOLUME0 + numInBank, volToCc(volume));
+		}
+	}
+
+	void SetSurfacePan(MediaTrack* track, double pan) final {
+		const int numInBank = this->_getNumInBank(track);
+		if (numInBank != -1) {
+			char panText[64];
+			mkpanstr(panText, pan);
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText);
+			this->_sendCc(CMD_KNOB_PAN0 + numInBank, panToCc(pan));
+		}
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -403,6 +423,13 @@ class NiMidiSurface: public BaseSurface {
 		delete event;
 	}
 
+	int _getNumInBank(MediaTrack* track) {
+		const int id = CSurf_TrackToID(track, false);
+		if (this->_bankStart <= id && id < this->_bankStart + BANK_NUM_TRACKS) {
+			return id % BANK_NUM_TRACKS;
+		}
+		return -1;
+	}
 };
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev) {
