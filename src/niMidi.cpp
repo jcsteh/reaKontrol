@@ -299,7 +299,7 @@ class NiMidiSurface: public BaseSurface {
 			double pan = *(double*)GetSetMediaTrackInfo(track, "D_PAN", nullptr);
 			char panText[64];
 			mkpanstr(panText, pan);
-			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, volText);
+			this->_sendSysex(CMD_TRACK_PAN_TEXT, 0, numInBank, panText);
 			const char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
 				name = "";
