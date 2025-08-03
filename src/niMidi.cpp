@@ -274,7 +274,9 @@ class NiMidiSurface: public BaseSurface {
 	void _onBankChange() {
 		int numInBank = 0;
 		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
-		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
+		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
+		// count the master, so add 1 to the count.
+		const int numTracks = CSurf_NumTracks(false) + 1;
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
