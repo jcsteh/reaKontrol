@@ -31,7 +31,7 @@ You can download the latest build using the links at the top of this page.
 
 Once downloaded, on Windows, simply copy the `reaper_kontrol.dll` file you downloaded to the `%appdata%\REAPER\UserPlugins` folder using Windows File Explorer.
 You can get to this folder by copying the name above and pasting it into either the Windows Run dialog or the File Explorer address bar.
-On Mac, copy the `reaper_kontrol.dylib` file to the `Library/Application Support/REAPER` folder inside your home folder.
+On Mac, copy the `reaper_kontrol.dylib` file to the `Library/Application Support/REAPER/UserPlugins` folder inside your home folder.
 
 You do not need to add a control surface or perform any other configuration in REAPER.
 Komplete Kontrol Host integration should work as soon as you start REAPER with a Komplete Kontrol keyboard connected.
