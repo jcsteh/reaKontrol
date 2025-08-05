@@ -8,6 +8,7 @@
 
 #include <cstring>
 #include <regex>
+#include <sstream>
 #include <string>
 #ifdef _WIN32
 #include <windows.h>
@@ -39,20 +40,27 @@ const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
 
 int getKkMidiDevice(auto countFunc, auto getFunc) {
+	ostringstream s;
 	int count = countFunc();
+	s << count << " total devices" << endl;
 	for (int dev = 0; dev < count; ++dev) {
 		char rawName[50];
 		const bool present = getFunc(dev, rawName, sizeof(rawName));
+		s << "consider dev " << dev << " \"" << rawName << "\" present " << present << endl;
 		if (!present) {
 			continue;
 		}
 		const string_view name(rawName);
 		for (const char* suffix: KK_DEVICE_NAME_SUFFIXES) {
 			if (name.ends_with(suffix)) {
+				s << "returning dev " << dev << endl;
+				ShowConsoleMsg(s.str().c_str());
 				return dev;
 			}
 		}
 	}
+	s << "couldn't find matching device" << endl;
+	ShowConsoleMsg(s.str().c_str());
 	return -1;
 }
 
@@ -126,6 +134,9 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 BaseSurface::BaseSurface(int inDev, int outDev) {
 	this->_midiIn = CreateMIDIInput(inDev);
 	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
+	ostringstream s;
+	s << "input " << this->_midiIn << " output " << this->_midiOut << endl;
+	ShowConsoleMsg(s.str().c_str());
 	if (this->_midiOut) {
 		this->_midiIn->start();
 	}
@@ -157,15 +168,18 @@ void BaseSurface::Run() {
 IReaperControlSurface* surface = nullptr;
 
 void connect() {
+	ShowConsoleMsg("searching for MIDI input\n");
 	int inDev = getKkMidiDevice(GetNumMIDIInputs, GetMIDIInputName);
 	if (inDev == -1) {
 		return;
 	}
+	ShowConsoleMsg("searching for MIDI input\n");
 	int outDev = getKkMidiDevice(GetNumMIDIOutputs, GetMIDIOutputName);
 	if (outDev == -1) {
 		return;
 	}
 	if (isMk1Connected()) {
+		ShowConsoleMsg("create NiMidiSurface\n");
 		surface = createMcuSurface(inDev, outDev);
 	} else {
 		surface = createNiMidiSurface(inDev, outDev);

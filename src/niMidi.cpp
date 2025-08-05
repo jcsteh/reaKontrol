@@ -111,6 +111,7 @@ class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
 	: BaseSurface(inDev, outDev) {
+		ShowConsoleMsg("sending hello\n");
 		this->_sendCc(CMD_HELLO, 0);
 	}
 
@@ -197,6 +198,11 @@ class NiMidiSurface: public BaseSurface {
 
 		switch (command) {
 			case CMD_HELLO:
+				{
+					ostringstream s;
+					s << "received hello ack " << value << endl;
+					ShowConsoleMsg(s.str().c_str());
+				}
 				this->_protocolVersion = value;
 				break;
 			case CMD_PLAY:
