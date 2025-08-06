@@ -41,7 +41,7 @@ const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
 int getKkMidiDevice(auto countFunc, auto getFunc) {
 	int count = countFunc();
 	for (int dev = 0; dev < count; ++dev) {
-		char rawName[50];
+		char rawName[100];
 		const bool present = getFunc(dev, rawName, sizeof(rawName));
 		if (!present) {
 			continue;
