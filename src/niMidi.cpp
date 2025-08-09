@@ -376,7 +376,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		CSurf_OnVolumeChange(track, value / 127.0, true);
+		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value / 127.0, true), nullptr);
 	}
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
@@ -386,7 +386,7 @@ class NiMidiSurface: public BaseSurface {
 			return;
 		}
 		const double PAN_SCALE_FACTOR = 127 * 8;
-		CSurf_OnPanChange(track, value / PAN_SCALE_FACTOR, true);
+		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value / PAN_SCALE_FACTOR, true), nullptr);
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
