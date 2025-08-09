@@ -198,6 +198,7 @@ class NiMidiSurface: public BaseSurface {
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
+				this->_onBankChange();
 				break;
 			case CMD_PLAY:
 				// Toggles between play and pause
@@ -289,7 +290,7 @@ class NiMidiSurface: public BaseSurface {
 
 	private:
 	int _protocolVersion = 0;
-	int _bankStart = -1;
+	int _bankStart = 0;
 
 	void _onBankChange() {
 		int numInBank = 0;
