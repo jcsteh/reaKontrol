@@ -198,6 +198,7 @@ class NiMidiSurface: public BaseSurface {
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
+				this->_sendCc(CMD_QUANTIZE, 1);
 				this->_onBankChange();
 				break;
 			case CMD_PLAY:
@@ -231,6 +232,9 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_REDO:
 				Main_OnCommand(40030, 0); // Edit: Redo
+				break;
+			case CMD_QUANTIZE:
+				Main_OnCommand(42033, 0); // Track: Toggle MIDI input quantize for selected tracks
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
