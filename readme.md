@@ -63,9 +63,9 @@ Whenever a required submodule commit changes (e.g. after git pull), you will nee
 If you aren't sure, run `git submodule update` after every git pull, merge or checkout.
 
 ### Dependencies
-To build OSARA, you will need:
+To build ReaKontrol, you will need:
 
-- Several git submodules used by OSARA.
+- Several git submodules used by ReaKontrol.
 	See the note about submodules in the previous section.
 
 #### Windows
