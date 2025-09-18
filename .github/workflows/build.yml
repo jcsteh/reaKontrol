@@ -76,6 +76,7 @@ jobs:
           echo ${{ env.os }}Url=${{ fromJSON(steps.uploadBuild.outputs.assets)[0].browser_download_url }} >> "$GITHUB_OUTPUT"
       # We upload pull request builds as normal artifacts.
       - name: upload PR build
+        if: ${{ github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: reaKontrol_${{ env.os }}_${{ env.version }}
