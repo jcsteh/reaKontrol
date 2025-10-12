@@ -33,8 +33,11 @@ Once downloaded, on Windows, simply copy the `reaper_kontrol.dll` file you downl
 You can get to this folder by copying the name above and pasting it into either the Windows Run dialog or the File Explorer address bar.
 On Mac, copy the `reaper_kontrol.dylib` file to the `Library/Application Support/REAPER/UserPlugins` folder inside your home folder.
 
-You do not need to add a control surface or perform any other configuration in REAPER.
+Usually, you do not need to add a control surface or perform any other configuration in REAPER.
 Komplete Kontrol Host integration should work as soon as you start REAPER with a Komplete Kontrol keyboard connected.
+The one exception is if you have previously set an alias for the MIDI input or output device used for Kontrol host integration (e.g. Komplete Kontrol M DAW) in REAPER's Preferences.
+ReaKontrol searches for the original device name, so an alias will likely interfere with automatic detection of the device.
+If you have done this, you must first remove the alias (or aliases) and then reconnect ReaKontrol or restart REAPER.
 
 ## Reconnecting
 ReaKontrol will connect to a Kontrol keyboard when REAPER starts.
