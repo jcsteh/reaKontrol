@@ -24,6 +24,7 @@ const int BANK_NUM_TRACKS = 8;
 
 const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
+const unsigned char CMD_SURFACE_CONFIG = 0x03;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
@@ -236,6 +237,8 @@ class NiMidiSurface: public BaseSurface {
 				// the cursor position, which isn't ideal. For now, just always enable
 				// both previous and next.
 				this->_sendCc(CMD_NAV_CLIPS, 3);
+				// Specify vertical track navigation.
+				this->_sendSysex(CMD_SURFACE_CONFIG, 1, 0, "track_orientation");
 				this->_onBankChange();
 				break;
 			case CMD_PLAY:
