@@ -20,7 +20,7 @@ const unsigned char MIDI_CC = 0xBF;
 const unsigned char MIDI_SYSEX_BEGIN[] = {
 	0xF0, 0x00, 0x21, 0x09, 0x00, 0x00, 0x44, 0x43, 0x01, 0x00};
 const unsigned char MIDI_SYSEX_END = 0xF7;
-const int BANK_NUM_TRACKS = 8;
+const int BANK_NUM_SLOTS = 8;
 
 const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
@@ -156,11 +156,11 @@ class NiMidiSurface: public BaseSurface {
 		}
 		this->_lastSelectedTrack = track;
 		int id = CSurf_TrackToID(track, false);
-		int numInBank = id % BANK_NUM_TRACKS;
-		int oldBankStart = this->_bankStart;
-		this->_bankStart = id - numInBank;
-		if (this->_bankStart != oldBankStart) {
-			this->_onBankChange();
+		int numInBank = id % BANK_NUM_SLOTS;
+		int oldBankStart = this->_trackBankStart;
+		this->_trackBankStart = id - numInBank;
+		if (this->_trackBankStart != oldBankStart) {
+			this->_onTrackBankChange();
 		}
 		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
@@ -182,7 +182,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void SetTrackListChange() final {
 		// A track has been added or removed. Send updated bank info.
-		this->_onBankChange();
+		this->_onTrackBankChange();
 	}
 
 	void SetSurfaceVolume(MediaTrack* track, double volume) final {
@@ -239,7 +239,7 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendCc(CMD_NAV_CLIPS, 3);
 				// Specify vertical track navigation.
 				this->_sendSysex(CMD_SURFACE_CONFIG, 1, 0, "track_orientation");
-				this->_onBankChange();
+				this->_onTrackBankChange();
 				break;
 			case CMD_PLAY:
 				// Toggles between play and pause
@@ -282,7 +282,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
-				this->_onBankSelect(convertSignedMidiValue(value));
+				this->_onTrackBankSelect(convertSignedMidiValue(value));
 				break;
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
@@ -369,25 +369,25 @@ class NiMidiSurface: public BaseSurface {
 
 	private:
 	int _protocolVersion = 0;
-	int _bankStart = 0;
+	int _trackBankStart = 0;
 	MediaTrack* _lastSelectedTrack = nullptr;
 
-	void _onBankChange() {
+	void _onTrackBankChange() {
 		int numInBank = 0;
 		// bankEnd is exclusive; i.e. 1 beyond the last track in the bank.
-		int bankEnd = this->_bankStart + BANK_NUM_TRACKS;
+		int bankEnd = this->_trackBankStart + BANK_NUM_SLOTS;
 		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
 		// count the master, so add 1 to the count.
 		const int numTracks = CSurf_NumTracks(false) + 1;
 		if (bankEnd > numTracks) {
 			bankEnd = numTracks;
 			// Mark additional bank tracks as not available
-			const int firstUnavailable = numTracks % BANK_NUM_TRACKS;
-			for (int i = firstUnavailable; i < BANK_NUM_TRACKS; ++i) {
+			const int firstUnavailable = numTracks % BANK_NUM_SLOTS;
+			for (int i = firstUnavailable; i < BANK_NUM_SLOTS; ++i) {
 				this->_sendSysex(CMD_TRACK_AVAIL, 0, i);
 			}
 		}
-		for (int id = this->_bankStart; id < bankEnd; ++id, ++numInBank) {
+		for (int id = this->_trackBankStart; id < bankEnd; ++id, ++numInBank) {
 			MediaTrack* track = CSurf_TrackFromID(id, false);
 			if (!track) {
 				break;
@@ -419,7 +419,7 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendCc(CMD_KNOB_PAN0 + numInBank, panToCc(pan));
 		}
 		int bankLights = 0;
-		if (this->_bankStart > 0) {
+		if (this->_trackBankStart > 0) {
 			// Bit 0: previous
 			bankLights |= 1;
 		}
@@ -430,20 +430,20 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_NAV_BANKS, bankLights);
 	}
 
-	void _onBankSelect(signed char value) {
+	void _onTrackBankSelect(signed char value) {
 		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
-		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
+		int newBankStart = this->_trackBankStart + (value * BANK_NUM_SLOTS);
 		int numTracks = CSurf_NumTracks(false); // If we ever want to show just MCP tracks in KK Mixer View (param) must be (true)
 		if ((newBankStart < 0) || (newBankStart > numTracks)) {
 			return;
 		}
-		this->_bankStart = newBankStart;
-		this->_onBankChange();
+		this->_trackBankStart = newBankStart;
+		this->_onTrackBankChange();
 	}
 
 	void _onKnobVolumeChange(unsigned char command, signed char value) {
 		int numInBank = command - CMD_KNOB_VOLUME0;
-		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
+		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_trackBankStart, false);
 		if (!track) {
 			return;
 		}
@@ -452,7 +452,7 @@ class NiMidiSurface: public BaseSurface {
 
 	void _onKnobPanChange(unsigned char command, signed char value) {
 		int numInBank = command - CMD_KNOB_PAN0;
-		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_bankStart, false);
+		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_trackBankStart, false);
 		if (!track) {
 			return;
 		}
@@ -511,14 +511,14 @@ class NiMidiSurface: public BaseSurface {
 
 	int _getNumInBank(MediaTrack* track) {
 		const int id = CSurf_TrackToID(track, false);
-		if (this->_bankStart <= id && id < this->_bankStart + BANK_NUM_TRACKS) {
-			return id % BANK_NUM_TRACKS;
+		if (this->_trackBankStart <= id && id < this->_trackBankStart + BANK_NUM_SLOTS) {
+			return id % BANK_NUM_SLOTS;
 		}
 		return -1;
 	}
 
 	MediaTrack* _getTrackFromNumInBank(unsigned char numInBank) {
-		int id = this->_bankStart + numInBank;
+		int id = this->_trackBankStart + numInBank;
 		return CSurf_TrackFromID(id, false);
 	}
 };
