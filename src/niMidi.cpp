@@ -161,6 +161,19 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
 			getKkInstanceName(track));
+		int trackLights = 0;
+		// 0 is the master track. We don't allow navigation to that.
+		if (id > 1) {
+			// Bit 0: previous
+			trackLights |= 1;
+		}
+		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
+		// count the master, so the return value is the last track, not the count.
+		if (id < CSurf_NumTracks(false)) {
+			// Bit 1: next
+			trackLights |= 1 << 1;
+		}
+		this->_sendCc(CMD_NAV_TRACKS, trackLights);
 	}
 
 	void SetTrackListChange() final {
@@ -351,7 +364,6 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendCc(CMD_KNOB_VOLUME0 + numInBank, volToCc(volume));
 			this->_sendCc(CMD_KNOB_PAN0 + numInBank, panToCc(pan));
 		}
-		// todo: navigate tracks
 		int bankLights = 0;
 		if (this->_bankStart > 0) {
 			// Bit 0: previous
