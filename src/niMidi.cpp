@@ -1,9 +1,9 @@
 /*
  * ReaKontrol
- * Support for MIDI protocol used by Komplete Kontrol S-series Mk2, A-series
+ * Support for MIDI protocol used by Komplete Kontrol S-series MK2/3, A-series
  * and M-Series
  * Author: James Teh <jamie@jantrid.net>
- * Copyright 2018-2019 James Teh
+ * Copyright 2018-2026 James Teh
  * License: GNU General Public License version 2.0
  */
 
@@ -25,6 +25,7 @@ const int BANK_NUM_SLOTS = 8;
 const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_SURFACE_CONFIG = 0x03;
+const unsigned char CMD_BANK_MAPPING = 0x05;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
@@ -44,6 +45,7 @@ const unsigned char CMD_NAV_CLIPS = 0x32;
 const unsigned char CMD_NAV_SCENES = 0x33;
 const unsigned char CMD_MOVE_TRANSPORT = 0x34;
 const unsigned char CMD_MOVE_LOOP = 0x35;
+const unsigned char CMD_NAV_PRESET = 0x36;
 const unsigned char CMD_TRACK_AVAIL = 0x40;
 const unsigned char CMD_SEL_TRACK_PARAMS_CHANGED = 0x41;
 const unsigned char CMD_TRACK_SELECTED = 0x42;
@@ -74,8 +76,28 @@ const unsigned char CMD_CHANGE_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
 const unsigned char CMD_TOGGLE_SOLO = 0x67;
+const unsigned char CMD_KNOB_PARAM0 = 0x70;
+const unsigned char CMD_KNOB_PARAM1 = 0x71;
+const unsigned char CMD_KNOB_PARAM2 = 0x72;
+const unsigned char CMD_KNOB_PARAM3 = 0x73;
+const unsigned char CMD_KNOB_PARAM4 = 0x74;
+const unsigned char CMD_KNOB_PARAM5 = 0x75;
+const unsigned char CMD_KNOB_PARAM6 = 0x76;
+const unsigned char CMD_KNOB_PARAM7 = 0x77;
+const unsigned char CMD_SELECT_PLUGIN = 0x70;
+const unsigned char CMD_PLUGIN_NAMES = 0x71;
+const unsigned char CMD_PARAM_NAME = 0x72;
+const unsigned char CMD_PARAM_VALUE_TEXT = 0x73;
+const unsigned char CMD_PARAM_PAGE = 0x74;
+const unsigned char CMD_PARAM_SECTION = 0x75;
+const unsigned char CMD_PRESET_NAME = 0x76;
 
 const unsigned char TRTYPE_UNSPEC = 1;
+
+const unsigned char PARAM_VIS_UNIPOLAR = 0;
+const unsigned char PARAM_VIS_BIPOLAR = 1;
+const unsigned char PARAM_VIS_SWITCH = 2;
+const unsigned char PARAM_VIS_DISCRETE = 3;
 
 const double PAN_SCALE_FACTOR = 127 * 8;
 
@@ -150,7 +172,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_LOOP, rep ? 1 : 0);
 	}
 
-	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
+	void SetSurfaceSelected(MediaTrack* track, bool selected) final {
 		if (!selected) {
 			return;
 		}
@@ -163,8 +185,11 @@ class NiMidiSurface: public BaseSurface {
 			this->_onTrackBankChange();
 		}
 		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
-		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
-			getKkInstanceName(track));
+		const string kkInstance = getKkInstanceName(track);
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0, kkInstance);
+		if (kkInstance.empty()) {
+			this->_initFx();
+		}
 		int trackLights = 0;
 		// 0 is the master track. We don't allow navigation to that.
 		if (id > 1) {
@@ -219,14 +244,65 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	int Extended(int call, void* parm1, void* parm2, void* parm3) final {
+		if (call == CSURF_EXT_SETFXPARAM) {
+			auto track = (MediaTrack*)parm1;
+			if (track != this->_lastSelectedTrack) {
+				return 0;
+			}
+			int fx = *(int*)parm2 >> 16;
+			if (fx != this->_selectedFx) {
+				return 0;
+			}
+			int param = *(int*)parm2 & 0xFFFF;
+			if (param < this->_fxBankStart || param >= this->_fxBankStart + BANK_NUM_SLOTS) {
+				return 0;
+			}
+			double normVal = *(double*)parm3;
+			const int numInBank = param - this->_fxBankStart;
+			this->_fxParamValueChanged(param, numInBank, normVal);
+		} else if (call == CSURF_EXT_SETFXCHANGE) {
+			// FX were added, removed or reordered.
+			auto track = (MediaTrack*)parm1;
+			if (track == this->_lastSelectedTrack) {
+				this->_initFx();
+			}
+		}
+		return 0;
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
+		if (event->midi_message[0] == MIDI_SYSEX_BEGIN[0]) {
+			const unsigned char* data = event->midi_message + sizeof(MIDI_SYSEX_BEGIN);
+			const unsigned char command = *data;
+			++data;
+			const unsigned char value = *data;
+			++data;
+			const unsigned char index = *data;
+			++data;
+			switch (command) {
+				case CMD_SELECT_PLUGIN:
+					// todo: Handle FX containers.
+					this->_selectedFx = index;
+					this->_fxChanged();
+					break;
+				default:
+#ifdef LOGGING
+					ostringstream s;
+					s << "Unhandled MIDI sysex command " << showbase << hex
+						<< (int)command << " " << (int)value << " " << (int)index << endl;
+#endif
+					break;
+			}
+			return;
+		}
+
 		if (event->midi_message[0] != MIDI_CC) {
 			return;
 		}
 		unsigned char& command = event->midi_message[1];
 		unsigned char& value = event->midi_message[2];
-
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
@@ -240,6 +316,9 @@ class NiMidiSurface: public BaseSurface {
 				// Specify vertical track navigation.
 				this->_sendSysex(CMD_SURFACE_CONFIG, 1, 0, "track_orientation");
 				this->_onTrackBankChange();
+				break;
+			case CMD_BANK_MAPPING:
+				this->_isBankNavForTracks = value == 0;
 				break;
 			case CMD_PLAY:
 				// Toggles between play and pause
@@ -282,7 +361,11 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
-				this->_onTrackBankSelect(convertSignedMidiValue(value));
+				if (this->_isBankNavForTracks) {
+					this->_onTrackBankSelect(convertSignedMidiValue(value));
+				} else {
+					this->_navigateFxBanks(value == 1);
+				}
 				break;
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
@@ -354,6 +437,17 @@ class NiMidiSurface: public BaseSurface {
 				CSurf_SetSurfaceSolo(this->_lastSelectedTrack,
 					CSurf_OnSoloChange(this->_lastSelectedTrack, -1), nullptr);
 				break;
+			case CMD_KNOB_PARAM0:
+			case CMD_KNOB_PARAM1:
+			case CMD_KNOB_PARAM2:
+			case CMD_KNOB_PARAM3:
+			case CMD_KNOB_PARAM4:
+			case CMD_KNOB_PARAM5:
+			case CMD_KNOB_PARAM6:
+			case CMD_KNOB_PARAM7:
+				this->_changeFxParamValue(command - CMD_KNOB_PARAM0,
+					convertSignedMidiValue(value));
+				break;
 			default:
 #ifdef LOGGING
 				ostringstream s;
@@ -371,6 +465,11 @@ class NiMidiSurface: public BaseSurface {
 	int _protocolVersion = 0;
 	int _trackBankStart = 0;
 	MediaTrack* _lastSelectedTrack = nullptr;
+	// If true, bank navigation messages are for tracks. If false, they are for
+	// plugin parameters.
+	bool _isBankNavForTracks = true;
+	int _selectedFx = 0;
+	int _fxBankStart = 0;
 
 	void _onTrackBankChange() {
 		int numInBank = 0;
@@ -520,6 +619,109 @@ class NiMidiSurface: public BaseSurface {
 	MediaTrack* _getTrackFromNumInBank(unsigned char numInBank) {
 		int id = this->_trackBankStart + numInBank;
 		return CSurf_TrackFromID(id, false);
+	}
+
+	void _initFx() {
+		ostringstream s;
+		int count = TrackFX_GetCount(this->_lastSelectedTrack);
+		for (int f = 0; f < count; ++f) {
+			if (s.tellp() > 0) {
+				s << '\0';
+			}
+			// todo: Handle FX containers.
+			char name[100] = "";
+			TrackFX_GetFXName(this->_lastSelectedTrack, f, name, sizeof(name));
+			s << name;
+		}
+		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
+		this->_selectedFx = 0;
+		this->_fxChanged();
+	}
+
+	void _fxChanged() {
+		this->_fxBankStart = 0;
+		this->_sendSysex(CMD_SELECT_PLUGIN, 0, this->_selectedFx);
+		this->_fxBankChanged();
+	}
+
+	bool _isFxParamToggle(int param) {
+		bool isToggle = false;
+		TrackFX_GetParameterStepSizes(this->_lastSelectedTrack, this->_selectedFx,
+			param, nullptr, nullptr, nullptr, &isToggle);
+		return isToggle;
+	}
+
+	void _fxBankChanged() {
+		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
+			this->_selectedFx);
+		this->_sendSysex(CMD_PARAM_PAGE, count / BANK_NUM_SLOTS,
+			this->_fxBankStart / BANK_NUM_SLOTS);
+		// bankEnd is exclusive; i.e. 1 beyond the last parameter in the bank.
+		const int bankEnd = min(this->_fxBankStart + BANK_NUM_SLOTS, count);
+		int numInBank = 0;
+		for (int p = this->_fxBankStart; p < bankEnd; ++p, ++numInBank) {
+			char name[100] = "";
+			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, p, name,
+				sizeof(name));
+			const bool isToggle = this->_isFxParamToggle(p);
+			this->_sendSysex(CMD_PARAM_NAME,
+				isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
+			double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
+				this->_selectedFx, p);
+			this->_fxParamValueChanged(p, numInBank, val);
+		}
+		// If there aren't sufficient parameters to fill the bank, clear the
+		// remaining slots.
+		for (; numInBank < BANK_NUM_SLOTS; ++numInBank) {
+			this->_sendSysex(CMD_PARAM_NAME, PARAM_VIS_UNIPOLAR, numInBank);
+		}
+	}
+
+	void _fxParamValueChanged(int param, int numInBank, double value) {
+		this->_sendCc(CMD_KNOB_PARAM0 + numInBank,127 * value); 
+		char valText[100] = "";
+		TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
+			this->_selectedFx, param, value, valText, sizeof(valText));
+		this->_sendSysex(CMD_PARAM_VALUE_TEXT, 0, numInBank, valText);
+	}
+
+	void _navigateFxBanks(bool next) {
+		int newBankStart = this->_fxBankStart;
+		if (next) {
+			newBankStart += BANK_NUM_SLOTS;
+		} else {
+			newBankStart -= BANK_NUM_SLOTS;
+		}
+		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
+			this->_selectedFx);
+		if (newBankStart < 0 || newBankStart >= count) {
+			return;
+		}
+		this->_fxBankStart = newBankStart;
+		this->_fxBankChanged();
+	}
+
+	void _changeFxParamValue(int numInBank, signed char change) {
+		int param = this->_fxBankStart + numInBank;
+		double val;
+		if (this->_isFxParamToggle(param)) {
+			val = change > 0 ? 1.0 : 0.0;
+		} else {
+			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
+				this->_selectedFx, param);
+			val += change / 127.0;
+			val = clamp(val, 0.0, 1.0);
+		}
+		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
+			val);
+		double checkVal = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
+			this->_selectedFx, param);
+		if (abs(checkVal - val) > 0.0001) {
+			// The value couldn't be set. This happens for REAPER's bypass and delta
+			// parameters. Try treating it as a toggle.
+			TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
+				change > 0 ? 1.0 : 0.0);
+		}
 	}
 };
 

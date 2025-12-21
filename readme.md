@@ -5,7 +5,7 @@
 <!--endDownload-->
 
 - Author: James Teh &lt;jamie@jantrid.net&gt; & other contributors
-- Copyright: 2018-2025 James Teh & other contributors
+- Copyright: 2018-2026 James Teh & other contributors
 - License: GNU General Public License version 2.0
 
 ReaKontrol is a [REAPER](https://www.reaper.fm/) extension which provides advanced host integration for [Native Instruments Komplete Kontrol keyboards](https://www.native-instruments.com/en/products/komplete/keyboards/).
@@ -24,6 +24,7 @@ The following functionality is currently supported:
 - Clip navigation: moves between project markers
 - Mixer view: volume/pan adjustment with the 8 knobs
 - The track name and mute, solo and armed states are displayed as appropriate.
+- Adjustment of non- NKS FX parameters (Kontrol S MK3 only).
 
 ## Download and Installation
 For now, there is no installer.

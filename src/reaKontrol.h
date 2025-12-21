@@ -48,6 +48,14 @@
 #define REAPERAPI_WANT_CSurf_OnMuteChange
 #define REAPERAPI_WANT_CSurf_SetSurfaceSolo
 #define REAPERAPI_WANT_CSurf_OnSoloChange
+#define REAPERAPI_WANT_TrackFX_GetCount
+#define REAPERAPI_WANT_TrackFX_GetFXName
+#define REAPERAPI_WANT_TrackFX_GetNumParams
+#define REAPERAPI_WANT_TrackFX_GetParamName
+#define REAPERAPI_WANT_TrackFX_GetParamNormalized
+#define REAPERAPI_WANT_TrackFX_FormatParamValueNormalized
+#define REAPERAPI_WANT_TrackFX_SetParamNormalized
+#define REAPERAPI_WANT_TrackFX_GetParameterStepSizes
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
