@@ -44,6 +44,10 @@
 #define REAPERAPI_WANT_mkvolstr
 #define REAPERAPI_WANT_mkpanstr
 #define REAPERAPI_WANT_SetOnlyTrackSelected
+#define REAPERAPI_WANT_CSurf_SetSurfaceMute
+#define REAPERAPI_WANT_CSurf_OnMuteChange
+#define REAPERAPI_WANT_CSurf_SetSurfaceSolo
+#define REAPERAPI_WANT_CSurf_OnSoloChange
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 

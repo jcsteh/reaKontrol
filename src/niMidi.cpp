@@ -202,6 +202,20 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	void SetSurfaceMute(MediaTrack *track, bool mute) final {
+		const int numInBank = this->_getNumInBank(track);
+		if (numInBank != -1) {
+			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
+		}
+	}
+
+	void SetSurfaceSolo(MediaTrack *track, bool solo) final {
+		const int numInBank = this->_getNumInBank(track);
+		if (numInBank != -1) {
+			this->_sendSysex(CMD_TRACK_SOLOED, solo ? 1 : 0, numInBank);
+		}
+	}
+
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
 		if (event->midi_message[0] != MIDI_CC) {
@@ -281,6 +295,16 @@ class NiMidiSurface: public BaseSurface {
 					SetOnlyTrackSelected(track);
 				}
 				break;
+			case CMD_TRACK_MUTED:
+				if (MediaTrack* track = this->_getTrackFromNumInBank(value)) {
+					CSurf_SetSurfaceMute(track, CSurf_OnMuteChange(track, -1), nullptr);
+				}
+				break;
+			case CMD_TRACK_SOLOED:
+				if (MediaTrack* track = this->_getTrackFromNumInBank(value)) {
+					CSurf_SetSurfaceSolo(track, CSurf_OnSoloChange(track, -1), nullptr);
+				}
+				break;
 			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
 			case CMD_KNOB_VOLUME2:
@@ -300,6 +324,14 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				break;
+			case CMD_TOGGLE_MUTE:
+				CSurf_SetSurfaceMute(this->_lastSelectedTrack,
+					CSurf_OnMuteChange(this->_lastSelectedTrack, -1), nullptr);
+				break;
+			case CMD_TOGGLE_SOLO:
+				CSurf_SetSurfaceSolo(this->_lastSelectedTrack,
+					CSurf_OnSoloChange(this->_lastSelectedTrack, -1), nullptr);
 				break;
 			default:
 #ifdef LOGGING
