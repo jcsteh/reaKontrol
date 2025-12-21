@@ -151,6 +151,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!selected) {
 			return;
 		}
+		this->_lastSelectedTrack = track;
 		int id = CSurf_TrackToID(track, false);
 		int numInBank = id % BANK_NUM_TRACKS;
 		int oldBankStart = this->_bankStart;
@@ -258,10 +259,7 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
-				Main_OnCommand(value == 1 ?
-					40285 : // Track: Go to next track
-					40286, // Track: Go to previous track
-				0);
+				this->_onNavigateTracks(value == 1);
 				break;
 			case CMD_NAV_BANKS:
 				// Value is -1 or 1.
@@ -317,6 +315,7 @@ class NiMidiSurface: public BaseSurface {
 	private:
 	int _protocolVersion = 0;
 	int _bankStart = 0;
+	MediaTrack* _lastSelectedTrack = nullptr;
 
 	void _onBankChange() {
 		int numInBank = 0;
@@ -412,6 +411,22 @@ class NiMidiSurface: public BaseSurface {
 		}
 		const double PAN_SCALE_FACTOR = 127 * 8;
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value / PAN_SCALE_FACTOR, true), nullptr);
+	}
+
+	void _onNavigateTracks(bool next) {
+		int id = CSurf_TrackToID(this->_lastSelectedTrack, false);
+		if (next) {
+			++id;
+		} else {
+			--id;
+			if (id == 0) {
+				return; // Don't allow navigation to the master track.
+			}
+		}
+		MediaTrack* track = CSurf_TrackFromID(id, false);
+		if (track) {
+			SetOnlyTrackSelected(track);
+		}
 	}
 
 	void _sendCc(unsigned char command, unsigned char value) {
