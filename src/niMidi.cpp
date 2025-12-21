@@ -277,7 +277,9 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
-				this->_onTrackSelect(value);
+				if (MediaTrack* track = this->_getTrackFromNumInBank(value)) {
+					SetOnlyTrackSelected(track);
+				}
 				break;
 			case CMD_KNOB_VOLUME0:
 			case CMD_KNOB_VOLUME1:
@@ -375,14 +377,6 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_NAV_BANKS, bankLights);
 	}
 
-	void _onTrackSelect(unsigned char numInBank) {
-		int id = this->_bankStart + numInBank;
-		MediaTrack* track = CSurf_TrackFromID(id, false);
-		if (track) {
-			SetOnlyTrackSelected(track);
-		}
-	}
-
 	void _onBankSelect(signed char value) {
 		// Manually switch the bank visible in Mixer View WITHOUT influencing track selection
 		int newBankStart = this->_bankStart + (value * BANK_NUM_TRACKS);
@@ -469,6 +463,11 @@ class NiMidiSurface: public BaseSurface {
 			return id % BANK_NUM_TRACKS;
 		}
 		return -1;
+	}
+
+	MediaTrack* _getTrackFromNumInBank(unsigned char numInBank) {
+		int id = this->_bankStart + numInBank;
+		return CSurf_TrackFromID(id, false);
 	}
 };
 
