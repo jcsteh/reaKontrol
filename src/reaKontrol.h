@@ -43,6 +43,7 @@
 #define REAPERAPI_WANT_DB2SLIDER
 #define REAPERAPI_WANT_mkvolstr
 #define REAPERAPI_WANT_mkpanstr
+#define REAPERAPI_WANT_SetOnlyTrackSelected
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 

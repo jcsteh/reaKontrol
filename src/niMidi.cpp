@@ -376,24 +376,12 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendCc(CMD_NAV_BANKS, bankLights);
 	}
 
-	void ClearSelected() {
-		// Clear all selected tracks.
-		int iSel = 0;
-		// really ALL tracks, hence no use of CSurf_NumTracks
-		for (int i = 0; i <= GetNumTracks(); i++) {
-			GetSetMediaTrackInfo(CSurf_TrackFromID(i, false), "I_SELECTED", &iSel);
-		}
-	}
-
 	void _onTrackSelect(unsigned char numInBank) {
 		int id = this->_bankStart + numInBank;
-		if (id > CSurf_NumTracks(false)) {
-			return;
-		}
 		MediaTrack* track = CSurf_TrackFromID(id, false);
-		ClearSelected();
-		int iSel = 1; // "Select"
-		GetSetMediaTrackInfo(track, "I_SELECTED", &iSel);
+		if (track) {
+			SetOnlyTrackSelected(track);
+		}
 	}
 
 	void _onBankSelect(signed char value) {
