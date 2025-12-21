@@ -148,18 +148,19 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	virtual void SetSurfaceSelected(MediaTrack* track, bool selected) override {
-		if (selected) {
-			int id = CSurf_TrackToID(track, false);
-			int numInBank = id % BANK_NUM_TRACKS;
-			int oldBankStart = this->_bankStart;
-			this->_bankStart = id - numInBank;
-			if (this->_bankStart != oldBankStart) {
-				this->_onBankChange();
-			}
-			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
-			this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
-				getKkInstanceName(track));
+		if (!selected) {
+			return;
 		}
+		int id = CSurf_TrackToID(track, false);
+		int numInBank = id % BANK_NUM_TRACKS;
+		int oldBankStart = this->_bankStart;
+		this->_bankStart = id - numInBank;
+		if (this->_bankStart != oldBankStart) {
+			this->_onBankChange();
+		}
+		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
+		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0,
+			getKkInstanceName(track));
 	}
 
 	void SetTrackListChange() final {
