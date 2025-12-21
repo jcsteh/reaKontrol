@@ -22,7 +22,9 @@
 #define REAPERAPI_WANT_CSurf_TrackFromID
 #define REAPERAPI_WANT_GetLastTouchedTrack
 #define REAPERAPI_WANT_CSurf_OnPlay
+#ifdef LOGGING
 #define REAPERAPI_WANT_ShowConsoleMsg
+#endif
 #define REAPERAPI_WANT_TrackFX_GetCount
 #define REAPERAPI_WANT_TrackFX_GetFXName
 #define REAPERAPI_WANT_TrackFX_GetParamName

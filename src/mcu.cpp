@@ -46,12 +46,14 @@ class McuSurface: public BaseSurface {
 
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
+#ifdef LOGGING
 		ostringstream s;
 		s << "MIDI message " << showbase << hex
 			<< (int)event->midi_message[0] << " "
 			<< (int)event->midi_message[1] << " "
 			<< (int)event->midi_message[2] << endl;
 		ShowConsoleMsg(s.str().c_str());
+#endif
 		if ((event->midi_message[0] != MIDI_NOTE_ON
 				&& event->midi_message[0] != MIDI_CC)
 			|| event->midi_message[2] == MIDI_VAL_OFF
@@ -111,6 +113,7 @@ class McuSurface: public BaseSurface {
 		event->frame_offset = 0;
 		event->size = message.length();
 		memcpy(event->midi_message, message.c_str(), message.length());
+#ifdef LOGGING
 		ostringstream s;
 		s << "send raw" << hex << showbase;
 		for (int i = 0; i < event->size; ++i) {
@@ -118,6 +121,7 @@ class McuSurface: public BaseSurface {
 		}
 		s << endl;
 		ShowConsoleMsg(s.str().c_str());
+#endif
 		this->_midiOut->SendMsg(event, -1);
 		delete event;
 	}

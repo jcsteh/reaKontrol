@@ -288,12 +288,14 @@ class NiMidiSurface: public BaseSurface {
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
 			default:
+#ifdef LOGGING
 				ostringstream s;
 				s << "Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
 					<< (int)event->midi_message[2] << endl;
 				ShowConsoleMsg(s.str().c_str());
+#endif
 				break;
 		}
 	}
