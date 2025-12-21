@@ -76,6 +76,8 @@ const unsigned char CMD_TOGGLE_SOLO = 0x67;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
+const double PAN_SCALE_FACTOR = 127 * 8;
+
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
 signed char convertSignedMidiValue(unsigned char value) {
@@ -325,6 +327,18 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN7:
 				this->_onKnobPanChange(command, convertSignedMidiValue(value));
 				break;
+			case CMD_CHANGE_VOLUME:
+				CSurf_SetSurfaceVolume(this->_lastSelectedTrack,
+					CSurf_OnVolumeChange(this->_lastSelectedTrack,
+						convertSignedMidiValue(value) / 127.0, true),
+					nullptr);
+				break;
+			case CMD_CHANGE_PAN:
+				CSurf_SetSurfacePan(this->_lastSelectedTrack,
+					CSurf_OnPanChange(this->_lastSelectedTrack,
+						convertSignedMidiValue(value) / PAN_SCALE_FACTOR, true),
+					nullptr);
+				break;
 			case CMD_TOGGLE_MUTE:
 				CSurf_SetSurfaceMute(this->_lastSelectedTrack,
 					CSurf_OnMuteChange(this->_lastSelectedTrack, -1), nullptr);
@@ -435,7 +449,6 @@ class NiMidiSurface: public BaseSurface {
 		if (!track) {
 			return;
 		}
-		const double PAN_SCALE_FACTOR = 127 * 8;
 		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value / PAN_SCALE_FACTOR, true), nullptr);
 	}
 
