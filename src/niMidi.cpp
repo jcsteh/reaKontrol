@@ -199,6 +199,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				this->_sendCc(CMD_QUANTIZE, 1);
+				// Strictly speaking, we should only set bit 0 when we're not at the
+				// start of the project, and bit 1 when we're not at the end of the
+				// project/time selection/loop area. However, this would involve polling
+				// the cursor position, which isn't ideal. For now, just always enable
+				// both previous and next.
+				this->_sendCc(CMD_NAV_CLIPS, 3);
 				this->_onBankChange();
 				break;
 			case CMD_PLAY:
