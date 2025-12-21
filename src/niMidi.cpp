@@ -111,7 +111,7 @@ class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
 	: BaseSurface(inDev, outDev) {
-		this->_sendCc(CMD_HELLO, 0);
+		this->_sendCc(CMD_HELLO, 3);
 	}
 
 	virtual ~NiMidiSurface() {
