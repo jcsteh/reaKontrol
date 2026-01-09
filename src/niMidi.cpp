@@ -292,7 +292,11 @@ class NiMidiSurface: public BaseSurface {
 				0);
 				break;
 			case CMD_MOVE_TRANSPORT:
-				CSurf_ScrubAmt(convertSignedMidiValue(value));
+				// Value is -1 or 1.
+				Main_OnCommand(value == 1 ?
+					40647 : // View: Move cursor right to grid division
+					40646, // View: Move cursor left to grid division
+				0);
 				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
