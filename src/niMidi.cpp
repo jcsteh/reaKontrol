@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <string>
 #include <sstream>
+#include <vector>
 #include <WDL/db2val.h>
 #include <cstring>
 #include "reaKontrol.h"
@@ -284,11 +285,13 @@ class NiMidiSurface: public BaseSurface {
 			++data;
 			const unsigned char index = *data;
 			++data;
+			// infoSize is the number of bytes of additional info. We subtract the
+			// sysex prefix, plus 3 bytes for the command, value and index, plus an
+			// additional byte for the sysex suffix.
+			int infoSize = event->size - sizeof(MIDI_SYSEX_BEGIN) - 4;
 			switch (command) {
 				case CMD_SELECT_PLUGIN:
-					// todo: Handle FX containers.
-					this->_selectedFx = index;
-					this->_fxChanged();
+					this->_selectFx(index, data, infoSize);
 					break;
 				default:
 #ifdef LOGGING
@@ -634,15 +637,49 @@ class NiMidiSurface: public BaseSurface {
 			return;
 		}
 		ostringstream s;
+
+		// This is a recursive lambda. We pass the function to itself to work
+		// around the compiler error: variable 'addContainer' declared with deduced
+		// type 'auto' cannot appear in its own initializer.
+		auto addContainer = [&s, this](int parentFx, auto&& addContainer) -> void {
+			// Containers are represented using JSON.
+			s << "{\"n\":\"";
+			char name[100] = "";
+			TrackFX_GetFXName(this->_lastSelectedTrack, parentFx, name, sizeof(name));
+			// Escape any quote characters in the name.
+			for (char* n = name; *n; ++n) {
+				if (*n == '"') {
+					s << "\\";
+				}
+				s << *n;
+			}
+			s << "\",\"c\":[";
+			for (int c = 0; ; ++c) {
+				int childFx = this->_getChildFx(parentFx, c);
+				if (childFx == -1) {
+					s << "]}";
+					break;
+				}
+				if (c > 0) {
+					s << ",";
+				}
+				addContainer(childFx, addContainer);
+			}
+		};
+
 		int count = TrackFX_GetCount(this->_lastSelectedTrack);
 		for (int f = 0; f < count; ++f) {
 			if (s.tellp() > 0) {
 				s << '\0';
 			}
-			// todo: Handle FX containers.
-			char name[100] = "";
-			TrackFX_GetFXName(this->_lastSelectedTrack, f, name, sizeof(name));
-			s << name;
+			if (this->_getChildFx(f, 0) != -1) {
+				// This is a container.
+				addContainer(f, addContainer);
+			} else {
+				char name[100] = "";
+				TrackFX_GetFXName(this->_lastSelectedTrack, f, name, sizeof(name));
+				s << name;
+			}
 		}
 		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
 		this->_selectedFx = 0;
@@ -650,8 +687,33 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _fxChanged() {
+		// The REAPER FX index might be in a container. Convert it to a sequence of
+		// 0-based positions in each nested container. We need to start with the
+		// deepest FX and walk its ancestors.
+		vector<char> subIndexes;
+		int fx = this->_selectedFx;
+		for (; ;) {
+			int parentFx = this->_getParentFx(fx);
+			if (parentFx == -1) {
+				break;
+			}
+			const int child0 = this->_getChildFx(parentFx, 0);
+			if (child0 == fx) {
+				subIndexes.push_back(0);
+			} else {
+				const int child1 = this->_getChildFx(parentFx, 1);
+				// The delta between child0 and child1 is the multiplier for children in
+				// this container.
+				const int multiplier = child1 - child0;
+				subIndexes.push_back((fx - child0) / multiplier);
+			}
+			fx = parentFx;
+		}
+		// subIndexes is ordered from deepest to shallowest. Kontrol needs shallowest
+		// to deepest, so we iterate it in reverse.
+		this->_sendSysex(CMD_SELECT_PLUGIN, 0, fx,
+			string(subIndexes.rbegin(), subIndexes.rend()));
 		this->_fxBankStart = 0;
-		this->_sendSysex(CMD_SELECT_PLUGIN, 0, this->_selectedFx);
 		this->_fxBankChanged();
 		this->_fxPresetChanged();
 	}
@@ -758,6 +820,37 @@ class NiMidiSurface: public BaseSurface {
 		TrackFX_GetPreset(this->_lastSelectedTrack, this->_selectedFx, name,
 			sizeof(name));
 		this->_sendSysex(CMD_PRESET_NAME, 0, 0, name);
+	}
+
+	int _getChildFx(int parentFx, int childNum) {
+		ostringstream s;
+		s << "container_item." << childNum;
+		char val[12] = "";
+		TrackFX_GetNamedConfigParm(this->_lastSelectedTrack, parentFx, s.str().c_str(),
+			val, sizeof(val));
+		return val[0] ? atoi(val) : -1;
+	}
+
+	void _selectFx(unsigned char topIndex, const unsigned char* subIndexes,
+		int numSubIndexes
+	) {
+		// Convert the sequence of 0-based container positions to a REAPER FX index.
+		int fx = topIndex;
+		for (int depth = 0; depth < numSubIndexes; ++depth) {
+			fx = this->_getChildFx(fx, subIndexes[depth]);
+			if (fx == -1) {
+				return;
+			}
+		}
+		this->_selectedFx = fx;
+		this->_fxChanged();
+	}
+
+	int _getParentFx(int childFx) {
+		char val[12] = "";
+		TrackFX_GetNamedConfigParm(this->_lastSelectedTrack, childFx,
+			"parent_container", val, sizeof(val));
+		return val[0] ? atoi(val) : -1;
 	}
 };
 
