@@ -246,6 +246,9 @@ class NiMidiSurface: public BaseSurface {
 
 	int Extended(int call, void* parm1, void* parm2, void* parm3) final {
 		if (call == CSURF_EXT_SETFXPARAM) {
+			if (this->_protocolVersion < 4) {
+				return 0;
+			}
 			auto track = (MediaTrack*)parm1;
 			if (track != this->_lastSelectedTrack) {
 				return 0;
@@ -627,6 +630,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _initFx() {
+		if (this->_protocolVersion < 4) {
+			return;
+		}
 		ostringstream s;
 		int count = TrackFX_GetCount(this->_lastSelectedTrack);
 		for (int f = 0; f < count; ++f) {
