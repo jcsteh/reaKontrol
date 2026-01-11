@@ -381,6 +381,11 @@ class NiMidiSurface: public BaseSurface {
 					40646, // View: Move cursor left to grid division
 				0);
 				break;
+			case CMD_NAV_PRESET:
+				TrackFX_NavigatePresets(this->_lastSelectedTrack, this->_selectedFx,
+					convertSignedMidiValue(value));
+				this->_fxPresetChanged();
+				break;
 			case CMD_TRACK_SELECTED:
 				// Select a track from current bank in Mixer Mode with top row buttons
 				if (MediaTrack* track = this->_getTrackFromNumInBank(value)) {
@@ -642,6 +647,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_fxBankStart = 0;
 		this->_sendSysex(CMD_SELECT_PLUGIN, 0, this->_selectedFx);
 		this->_fxBankChanged();
+		this->_fxPresetChanged();
 	}
 
 	bool _isFxParamToggle(int param) {
@@ -722,6 +728,30 @@ class NiMidiSurface: public BaseSurface {
 			TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
 				change > 0 ? 1.0 : 0.0);
 		}
+	}
+
+	void _fxPresetChanged() {
+		int presetCount = 0;
+		const int preset = TrackFX_GetPresetIndex(this->_lastSelectedTrack,
+			this->_selectedFx, &presetCount);
+		if (presetCount == 0) {
+			this->_sendCc(CMD_NAV_PRESET, 0);
+			return;
+		}
+		int presetLights = 0;
+		if (preset > 0) {
+			// Bit 0: previous
+			presetLights |= 1;
+		}
+		if (preset < presetCount - 1) {
+			// Bit 1: next
+			presetLights |= 1 << 1;
+		}
+		this->_sendCc(CMD_NAV_PRESET, presetLights);
+		char name[100] = "";
+		TrackFX_GetPreset(this->_lastSelectedTrack, this->_selectedFx, name,
+			sizeof(name));
+		this->_sendSysex(CMD_PRESET_NAME, 0, 0, name);
 	}
 };
 
