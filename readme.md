@@ -24,7 +24,7 @@ The following functionality is currently supported:
 - Clip navigation: moves between project markers
 - Mixer view: volume/pan adjustment with the 8 knobs
 - The track name and mute, solo and armed states are displayed as appropriate.
-- Adjustment of non- NKS FX parameters (Kontrol S MK3 only).
+- Adjustment of non- NKS FX parameters and presets (Kontrol S MK3 only).
 
 ## Download and Installation
 For now, there is no installer.

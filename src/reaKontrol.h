@@ -56,6 +56,9 @@
 #define REAPERAPI_WANT_TrackFX_FormatParamValueNormalized
 #define REAPERAPI_WANT_TrackFX_SetParamNormalized
 #define REAPERAPI_WANT_TrackFX_GetParameterStepSizes
+#define REAPERAPI_WANT_TrackFX_GetPresetIndex
+#define REAPERAPI_WANT_TrackFX_GetPreset
+#define REAPERAPI_WANT_TrackFX_NavigatePresets
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
