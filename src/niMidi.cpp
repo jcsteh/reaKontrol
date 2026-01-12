@@ -311,6 +311,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
 				this->_sendCc(CMD_QUANTIZE, 1);
+				this->_sendCc(CMD_TEMPO, 1);
 				// Strictly speaking, we should only set bit 0 when we're not at the
 				// start of the project, and bit 1 when we're not at the end of the
 				// project/time selection/loop area. However, this would involve polling
