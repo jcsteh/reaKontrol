@@ -188,9 +188,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 		const string kkInstance = getKkInstanceName(track);
 		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0, kkInstance);
-		if (kkInstance.empty()) {
-			this->_initFx();
-		}
+		this->_initFx();
 		int trackLights = 0;
 		// 0 is the master track. We don't allow navigation to that.
 		if (id > 1) {
