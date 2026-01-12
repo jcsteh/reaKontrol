@@ -726,7 +726,12 @@ class NiMidiSurface: public BaseSurface {
 	void _fxBankChanged() {
 		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
 			this->_selectedFx);
-		this->_sendSysex(CMD_PARAM_PAGE, count / BANK_NUM_SLOTS,
+		int numPages = count / BANK_NUM_SLOTS;
+		if (count % BANK_NUM_SLOTS) {
+			// numPages is the number of full pages. There is a final, partial page.
+			++numPages;
+		}
+		this->_sendSysex(CMD_PARAM_PAGE, numPages,
 			this->_fxBankStart / BANK_NUM_SLOTS);
 		// bankEnd is exclusive; i.e. 1 beyond the last parameter in the bank.
 		const int bankEnd = min(this->_fxBankStart + BANK_NUM_SLOTS, count);
