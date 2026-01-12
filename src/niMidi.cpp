@@ -177,6 +177,7 @@ class NiMidiSurface: public BaseSurface {
 		if (!selected) {
 			return;
 		}
+		const bool wasAlreadySelected = this->_lastSelectedTrack == track;
 		this->_lastSelectedTrack = track;
 		int id = CSurf_TrackToID(track, false);
 		int numInBank = id % BANK_NUM_SLOTS;
@@ -184,6 +185,13 @@ class NiMidiSurface: public BaseSurface {
 		this->_trackBankStart = id - numInBank;
 		if (this->_trackBankStart != oldBankStart) {
 			this->_onTrackBankChange();
+		} else if (wasAlreadySelected) {
+			// The track might have been renamed.
+			const char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
+			if (!name) {
+				name = "";
+			}
+			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 		}
 		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
 		const string kkInstance = getKkInstanceName(track);
