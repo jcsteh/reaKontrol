@@ -10,7 +10,6 @@
 
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
-#define REAPERAPI_WANT_GetNumMIDIInputs
 #define REAPERAPI_WANT_GetMIDIInputName
 #define REAPERAPI_WANT_GetNumMIDIOutputs
 #define REAPERAPI_WANT_GetMIDIOutputName
@@ -20,7 +19,6 @@
 #define REAPERAPI_WANT_CSurf_NumTracks
 #define REAPERAPI_WANT_CSurf_TrackToID
 #define REAPERAPI_WANT_CSurf_TrackFromID
-#define REAPERAPI_WANT_GetLastTouchedTrack
 #define REAPERAPI_WANT_CSurf_OnPlay
 #ifdef LOGGING
 #define REAPERAPI_WANT_ShowConsoleMsg
@@ -32,7 +30,6 @@
 #define REAPERAPI_WANT_CSurf_OnStop
 #define REAPERAPI_WANT_CSurf_OnRecord
 #define REAPERAPI_WANT_Main_OnCommand
-#define REAPERAPI_WANT_CSurf_ScrubAmt
 #define REAPERAPI_WANT_GetSetMediaTrackInfo
 #define REAPERAPI_WANT_CSurf_SetSurfaceVolume
 #define REAPERAPI_WANT_CSurf_SetSurfacePan
