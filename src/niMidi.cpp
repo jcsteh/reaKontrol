@@ -729,6 +729,15 @@ class NiMidiSurface: public BaseSurface {
 		bool isToggle = false;
 		TrackFX_GetParameterStepSizes(this->_lastSelectedTrack, this->_selectedFx,
 			param, nullptr, nullptr, nullptr, &isToggle);
+		if (!isToggle) {
+			// It's critical that these are treated as toggles because they can't be set
+			// to any value other than 0 or 1.
+			isToggle =
+				param == TrackFX_GetParamFromIdent(this->_lastSelectedTrack,
+					this->_selectedFx, ":bypass") ||
+				param == TrackFX_GetParamFromIdent(this->_lastSelectedTrack,
+					this->_selectedFx, ":delta");
+		}
 		return isToggle;
 	}
 
@@ -800,14 +809,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
 			val);
-		double checkVal = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
-			this->_selectedFx, param);
-		if (abs(checkVal - val) > 0.0001) {
-			// The value couldn't be set. This happens for REAPER's bypass and delta
-			// parameters. Try treating it as a toggle.
-			TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
-				change > 0 ? 1.0 : 0.0);
-		}
 	}
 
 	void _fxPresetChanged() {

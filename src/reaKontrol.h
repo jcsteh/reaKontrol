@@ -60,6 +60,7 @@
 #define REAPERAPI_WANT_TrackFX_GetPreset
 #define REAPERAPI_WANT_TrackFX_NavigatePresets
 #define REAPERAPI_WANT_TrackFX_GetNamedConfigParm
+#define REAPERAPI_WANT_TrackFX_GetParamFromIdent
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
