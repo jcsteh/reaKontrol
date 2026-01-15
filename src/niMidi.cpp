@@ -804,7 +804,8 @@ class NiMidiSurface: public BaseSurface {
 		} else {
 			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, param);
-			val += change / 127.0;
+			constexpr double SCALE_FACTOR = 127 * 8;
+			val += change / SCALE_FACTOR;
 			val = clamp(val, 0.0, 1.0);
 		}
 		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
