@@ -125,10 +125,16 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 
 BaseSurface::BaseSurface(int inDev, int outDev) {
 	this->_midiIn = CreateMIDIInput(inDev);
-	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
-	if (this->_midiOut) {
-		this->_midiIn->start();
+	if (!this->_midiIn) {
+		return;
 	}
+	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
+	if (!this->_midiOut) {
+		delete this->_midiIn;
+		this->_midiIn = nullptr;
+		return;
+	}
+	this->_midiIn->start();
 }
 
 BaseSurface::~BaseSurface() {
