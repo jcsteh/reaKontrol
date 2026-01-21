@@ -488,6 +488,8 @@ class NiMidiSurface: public BaseSurface {
 	bool _isBankNavForTracks = true;
 	int _selectedFx = 0;
 	int _fxBankStart = 0;
+	int _lastChangedFxParam = -1;
+	double _lastChangedFxParamValue = 0;
 
 	void _onTrackBankChange() {
 		int numInBank = 0;
@@ -723,6 +725,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_fxBankStart = 0;
 		this->_fxBankChanged();
 		this->_fxPresetChanged();
+		this->_lastChangedFxParam = -1;
 	}
 
 	bool _isFxParamToggle(int param) {
@@ -730,8 +733,6 @@ class NiMidiSurface: public BaseSurface {
 		TrackFX_GetParameterStepSizes(this->_lastSelectedTrack, this->_selectedFx,
 			param, nullptr, nullptr, nullptr, &isToggle);
 		if (!isToggle) {
-			// It's critical that these are treated as toggles because they can't be set
-			// to any value other than 0 or 1.
 			isToggle =
 				param == TrackFX_GetParamFromIdent(this->_lastSelectedTrack,
 					this->_selectedFx, ":bypass") ||
@@ -798,18 +799,25 @@ class NiMidiSurface: public BaseSurface {
 
 	void _changeFxParamValue(int numInBank, signed char change) {
 		int param = this->_fxBankStart + numInBank;
-		double val;
-		if (this->_isFxParamToggle(param)) {
-			val = change > 0 ? 1.0 : 0.0;
+		double val ;
+		if (param == this->_lastChangedFxParam) {
+			// Some parameters snap to defined values when you set them. This means that
+			// the next time we retrieve the value, it might be the same, in which case
+			// we would always be adjusting relative to the same value, getting nowhere.
+			// To deal with this, we cache the last parameter and value we set and adjust
+			// relative to that cached value.
+			val = this->_lastChangedFxParamValue;
 		} else {
 			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, param);
-			constexpr double SCALE_FACTOR = 127 * 8;
-			val += change / SCALE_FACTOR;
-			val = clamp(val, 0.0, 1.0);
 		}
+		constexpr double SCALE_FACTOR = 127 * 8;
+		val += change / SCALE_FACTOR;
+		val = clamp(val, 0.0, 1.0);
 		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
 			val);
+		this->_lastChangedFxParam = param;
+		this->_lastChangedFxParamValue = val;
 	}
 
 	void _fxPresetChanged() {
