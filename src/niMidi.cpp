@@ -340,11 +340,8 @@ class NiMidiSurface: public BaseSurface {
 					this->_changeParamHighRes(value, index, data[0], data[1]);
 					break;
 				default:
-#ifdef LOGGING
-					ostringstream s;
-					s << "Unhandled MIDI sysex command " << showbase << hex
-						<< (int)command << " " << (int)value << " " << (int)index << endl;
-#endif
+					log("Unhandled MIDI sysex command " << showbase << hex
+						<< (int)command << " " << (int)value << " " << (int)index);
 					break;
 			}
 			return;
@@ -506,14 +503,10 @@ class NiMidiSurface: public BaseSurface {
 					CSurf_OnSoloChange(this->_lastSelectedTrack, -1), nullptr);
 				break;
 			default:
-#ifdef LOGGING
-				ostringstream s;
-				s << "Unhandled MIDI message " << showbase << hex
+				log("Unhandled MIDI message " << showbase << hex
 					<< (int)event->midi_message[0] << " "
 					<< (int)event->midi_message[1] << " "
-					<< (int)event->midi_message[2] << endl;
-				ShowConsoleMsg(s.str().c_str());
-#endif
+					<< (int)event->midi_message[2]);
 				break;
 		}
 	}

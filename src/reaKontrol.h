@@ -62,6 +62,17 @@
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
+#ifdef LOGGING
+# include <sstream>
+# define log(msg) { \
+	ostringstream s; \
+	s << "reaKontrol " << msg << endl; \
+	ShowConsoleMsg(s.str().c_str()); \
+}
+#else
+# define log(msg)
+#endif
+
 const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {

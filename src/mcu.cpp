@@ -46,14 +46,10 @@ class McuSurface: public BaseSurface {
 
 	protected:
 	void _onMidiEvent(MIDI_event_t* event) override {
-#ifdef LOGGING
-		ostringstream s;
-		s << "MIDI message " << showbase << hex
+		log("MIDI message " << showbase << hex
 			<< (int)event->midi_message[0] << " "
 			<< (int)event->midi_message[1] << " "
-			<< (int)event->midi_message[2] << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
+			<< (int)event->midi_message[2]);
 		if ((event->midi_message[0] != MIDI_NOTE_ON
 				&& event->midi_message[0] != MIDI_CC)
 			|| event->midi_message[2] == MIDI_VAL_OFF
