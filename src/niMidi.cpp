@@ -37,6 +37,7 @@ const unsigned char CMD_CLEAR = 0x15;
 const unsigned char CMD_LOOP = 0x16;
 const unsigned char CMD_METRO = 0x17;
 const unsigned char CMD_TEMPO = 0x18;
+const unsigned char CMD_SET_TEMPO = 0x19;
 const unsigned char CMD_UNDO = 0x20;
 const unsigned char CMD_REDO = 0x21;
 const unsigned char CMD_QUANTIZE = 0x22;
@@ -107,6 +108,7 @@ const unsigned char PARAM_GROUP_PAN = 1;
 const unsigned char PARAM_GROUP_PLUGIN = 2;
 
 const double CC_PAN_SCALE_FACTOR = 127 * 8;
+constexpr double TEN_NS_IN_SEC = 10e-9;
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -283,6 +285,20 @@ class NiMidiSurface: public BaseSurface {
 			if (track == this->_lastSelectedTrack) {
 				this->_initFx();
 			}
+		} else if (call == CSURF_EXT_SETBPMANDPLAYRATE) {
+			if (!parm1) {
+				return 0;
+			}
+			double bpm = *(double*)parm1;
+			// Kontrol wants the value as an integer representing the duration of a
+			// quarter note in multiples of 10ns.
+			int kTempo = 60 / bpm / TEN_NS_IN_SEC;
+			// It has to be serialised as 5 7-bit values in little endian order.
+			unsigned char data[5];
+			for (int b = 0; b < 5; ++b) {
+				data[b] = (kTempo >> (b * 7)) & 0x7F;
+			}
+			this->_sendSysex(CMD_SET_TEMPO, 0, 0, string((char*)data, sizeof(data)));
 		}
 		return 0;
 	}
@@ -302,6 +318,19 @@ class NiMidiSurface: public BaseSurface {
 			// additional byte for the sysex suffix.
 			int infoSize = event->size - sizeof(MIDI_SYSEX_BEGIN) - 4;
 			switch (command) {
+				case CMD_SET_TEMPO: {
+					// The value is an integer serialised as 5 7-bit values in little
+					// endian order.
+					int kTempo = 0;
+					for (size_t b = 0; b < 5; ++b) {
+						kTempo += data[b] << (b * 7);
+					}
+					// The integer represents the duration of a quarter note in multiples of
+					// 10ns.
+					const double bpm = 60 / (kTempo * TEN_NS_IN_SEC);
+					CSurf_OnTempoChange(bpm);
+					break;
+				}
 				case CMD_SELECT_PLUGIN:
 					this->_selectFx(index, data, infoSize);
 					break;
