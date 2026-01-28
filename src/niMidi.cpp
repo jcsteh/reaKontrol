@@ -27,6 +27,7 @@ const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
 const unsigned char CMD_SURFACE_CONFIG = 0x03;
 const unsigned char CMD_BANK_MAPPING = 0x05;
+const unsigned char CMD_USE_SYSEX_PARAM = 0x06;
 const unsigned char CMD_PLAY = 0x10;
 const unsigned char CMD_RESTART = 0x11;
 const unsigned char CMD_REC = 0x12;
@@ -92,6 +93,7 @@ const unsigned char CMD_PARAM_VALUE_TEXT = 0x73;
 const unsigned char CMD_PARAM_PAGE = 0x74;
 const unsigned char CMD_PARAM_SECTION = 0x75;
 const unsigned char CMD_PRESET_NAME = 0x76;
+const unsigned char CMD_PARAM_HIGH_RES = 0x7F;
 
 const unsigned char TRTYPE_UNSPEC = 1;
 
@@ -100,7 +102,11 @@ const unsigned char PARAM_VIS_BIPOLAR = 1;
 const unsigned char PARAM_VIS_SWITCH = 2;
 const unsigned char PARAM_VIS_DISCRETE = 3;
 
-const double PAN_SCALE_FACTOR = 127 * 8;
+const unsigned char PARAM_GROUP_VOLUME = 0;
+const unsigned char PARAM_GROUP_PAN = 1;
+const unsigned char PARAM_GROUP_PLUGIN = 2;
+
+const double CC_PAN_SCALE_FACTOR = 127 * 8;
 
 // Convert a signed 7 bit MIDI value to a signed char.
 // That is, convertSignedMidiValue(127) will return -1.
@@ -137,7 +143,7 @@ class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
 	: BaseSurface(inDev, outDev) {
-		this->_sendCc(CMD_HELLO, 3);
+		this->_sendCc(CMD_HELLO, 4);
 	}
 
 	virtual ~NiMidiSurface() {
@@ -299,6 +305,11 @@ class NiMidiSurface: public BaseSurface {
 				case CMD_SELECT_PLUGIN:
 					this->_selectFx(index, data, infoSize);
 					break;
+				case CMD_PARAM_HIGH_RES:
+					// For protocol version 4 (S MK3), we receive this instead of
+					// CMD_KNOB_* CC messages.
+					this->_changeParamHighRes(value, index, data[0], data[1]);
+					break;
 				default:
 #ifdef LOGGING
 					ostringstream s;
@@ -329,6 +340,10 @@ class NiMidiSurface: public BaseSurface {
 				// Specify vertical track navigation.
 				this->_sendSysex(CMD_SURFACE_CONFIG, 1, 0, "track_orientation");
 				this->_onTrackBankChange();
+				if (this->_protocolVersion >= 4) {
+					// For S MK3, request sysex high resolution parameter adjustments.
+					this->_sendCc(CMD_USE_SYSEX_PARAM, 1);
+				}
 				break;
 			case CMD_BANK_MAPPING:
 				this->_isBankNavForTracks = value == 0;
@@ -423,7 +438,10 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
 			case CMD_KNOB_VOLUME7:
-				this->_onKnobVolumeChange(command, convertSignedMidiValue(value));
+				if (MediaTrack* track = this->_getTrackFromNumInBank(command - CMD_KNOB_VOLUME0)) {
+					CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track,
+						convertSignedMidiValue(value) / 127.0, true), nullptr);
+				}
 				break;
 			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
@@ -433,7 +451,10 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_PAN5:
 			case CMD_KNOB_PAN6:
 			case CMD_KNOB_PAN7:
-				this->_onKnobPanChange(command, convertSignedMidiValue(value));
+				if (MediaTrack* track = this->_getTrackFromNumInBank(command - CMD_KNOB_PAN0)) {
+					CSurf_SetSurfacePan(track, CSurf_OnPanChange(track,
+						convertSignedMidiValue(value) / CC_PAN_SCALE_FACTOR, true), nullptr);
+				}
 				break;
 			case CMD_CHANGE_VOLUME:
 				CSurf_SetSurfaceVolume(this->_lastSelectedTrack,
@@ -444,7 +465,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_CHANGE_PAN:
 				CSurf_SetSurfacePan(this->_lastSelectedTrack,
 					CSurf_OnPanChange(this->_lastSelectedTrack,
-						convertSignedMidiValue(value) / PAN_SCALE_FACTOR, true),
+						convertSignedMidiValue(value) / CC_PAN_SCALE_FACTOR, true),
 					nullptr);
 				break;
 			case CMD_TOGGLE_MUTE:
@@ -454,17 +475,6 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_TOGGLE_SOLO:
 				CSurf_SetSurfaceSolo(this->_lastSelectedTrack,
 					CSurf_OnSoloChange(this->_lastSelectedTrack, -1), nullptr);
-				break;
-			case CMD_KNOB_PARAM0:
-			case CMD_KNOB_PARAM1:
-			case CMD_KNOB_PARAM2:
-			case CMD_KNOB_PARAM3:
-			case CMD_KNOB_PARAM4:
-			case CMD_KNOB_PARAM5:
-			case CMD_KNOB_PARAM6:
-			case CMD_KNOB_PARAM7:
-				this->_changeFxParamValue(command - CMD_KNOB_PARAM0,
-					convertSignedMidiValue(value));
 				break;
 			default:
 #ifdef LOGGING
@@ -558,24 +568,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		this->_trackBankStart = newBankStart;
 		this->_onTrackBankChange();
-	}
-
-	void _onKnobVolumeChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_VOLUME0;
-		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_trackBankStart, false);
-		if (!track) {
-			return;
-		}
-		CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, value / 127.0, true), nullptr);
-	}
-
-	void _onKnobPanChange(unsigned char command, signed char value) {
-		int numInBank = command - CMD_KNOB_PAN0;
-		MediaTrack* track = CSurf_TrackFromID(numInBank + this->_trackBankStart, false);
-		if (!track) {
-			return;
-		}
-		CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, value / PAN_SCALE_FACTOR, true), nullptr);
 	}
 
 	void _onNavigateTracks(bool next) {
@@ -797,7 +789,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_fxBankChanged();
 	}
 
-	void _changeFxParamValue(int numInBank, signed char change) {
+	void _changeFxParamValue(int numInBank, double change) {
 		int param = this->_fxBankStart + numInBank;
 		double val ;
 		if (param == this->_lastChangedFxParam) {
@@ -811,8 +803,7 @@ class NiMidiSurface: public BaseSurface {
 			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, param);
 		}
-		constexpr double SCALE_FACTOR = 127 * 8;
-		val += change / SCALE_FACTOR;
+		val += change;
 		val = clamp(val, 0.0, 1.0);
 		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
 			val);
@@ -873,6 +864,34 @@ class NiMidiSurface: public BaseSurface {
 		TrackFX_GetNamedConfigParm(this->_lastSelectedTrack, childFx,
 			"parent_container", val, sizeof(val));
 		return val[0] ? atoi(val) : -1;
+	}
+
+	void _changeParamHighRes(unsigned char group, unsigned char index,
+		const unsigned char lsb, const unsigned char msb
+	) {
+		double change = lsb + (msb << 7);
+		if (change > 8192) {
+			// Convert to signed value.
+			change -= 16384;
+		}
+		change /= 8191.0;
+		switch (group) {
+			case PARAM_GROUP_VOLUME:
+				if (MediaTrack* track = this->_getTrackFromNumInBank(index)) {
+					CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track, change, true),
+						nullptr);
+				}
+				break;
+			case PARAM_GROUP_PAN:
+				if (MediaTrack* track = this->_getTrackFromNumInBank(index)) {
+					CSurf_SetSurfacePan(track, CSurf_OnPanChange(track, change, true),
+						nullptr);
+				}
+				break;
+			case PARAM_GROUP_PLUGIN:
+				this->_changeFxParamValue(index, change);
+				break;
+		}
 	}
 };
 
