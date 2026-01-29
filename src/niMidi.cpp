@@ -75,6 +75,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
+const unsigned char CMD_PLAY_CLIP = 0x60;
 const unsigned char CMD_CHANGE_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
@@ -355,7 +356,7 @@ class NiMidiSurface: public BaseSurface {
 		unsigned char& value = event->midi_message[2];
 		switch (command) {
 			case CMD_HELLO:
-				this->_protocolVersion = value;
+				this->_protocolVersion = 3;// fixme: value;
 				log("received hello ack, protocol version " << this->_protocolVersion);
 				this->_sendCc(CMD_QUANTIZE, 1);
 				this->_sendCc(CMD_TEMPO, 1);
@@ -393,6 +394,12 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
+			case CMD_CLEAR:
+			case CMD_PLAY_CLIP: // fixme
+				if (this->_protocolVersion < 4) {
+					this->_isBankNavForTracks = !this->_isBankNavForTracks;
+				}
+				break;
 			case CMD_LOOP:
 				Main_OnCommand(1068, 0); // Transport: Toggle repeat
 				break;
@@ -413,6 +420,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
+				if (this->_isUsingMixerForFx()) {
+					this->_navigateFx(value == 1);
+					break;
+				}
 				this->_onNavigateTracks(value == 1);
 				break;
 			case CMD_NAV_BANKS:
@@ -465,12 +476,19 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME4:
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:
-				if (MediaTrack* track = this->_getTrackFromNumInBank(command - CMD_KNOB_VOLUME0)) {
+			case CMD_KNOB_VOLUME7: {
+				const int numInBank = command - CMD_KNOB_VOLUME0;
+				if (this->_isUsingMixerForFx()) {
+					this->_changeFxParamValue(numInBank, convertSignedMidiValue(value) / 127.0
+						/ 8.0);
+					break;
+				}
+				if (MediaTrack* track = this->_getTrackFromNumInBank(numInBank)) {
 					CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track,
 						convertSignedMidiValue(value) / 127.0, true), nullptr);
 				}
 				break;
+			}
 			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
 			case CMD_KNOB_PAN2:
@@ -658,9 +676,14 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _initFx() {
-		if (this->_protocolVersion < 4) {
-			return;
+		if (this->_protocolVersion >= 4) {
+			this->_sendPluginNames();
 		}
+		this->_selectedFx = 0;
+		this->_fxChanged();
+	}
+
+	void _sendPluginNames() {
 		ostringstream s;
 
 		// This is a recursive lambda. We pass the function to itself to work
@@ -707,11 +730,21 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}
 		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
-		this->_selectedFx = 0;
-		this->_fxChanged();
 	}
 
 	void _fxChanged() {
+		if (this->_protocolVersion >= 4) {
+			this->_sendSelectPlugin();
+		}
+		this->_fxBankStart = 0;
+		this->_fxBankChanged();
+		if (this->_protocolVersion >= 4) {
+			this->_fxPresetChanged();
+		}
+		this->_lastChangedFxParam = -1;
+	}
+
+	void _sendSelectPlugin() {
 		// The REAPER FX index might be in a container. Convert it to a sequence of
 		// 0-based positions in each nested container. We need to start with the
 		// deepest FX and walk its ancestors.
@@ -738,10 +771,6 @@ class NiMidiSurface: public BaseSurface {
 		// to deepest, so we iterate it in reverse.
 		this->_sendSysex(CMD_SELECT_PLUGIN, 0, fx,
 			string(subIndexes.rbegin(), subIndexes.rend()));
-		this->_fxBankStart = 0;
-		this->_fxBankChanged();
-		this->_fxPresetChanged();
-		this->_lastChangedFxParam = -1;
 	}
 
 	bool _isFxParamToggle(int param) {
@@ -759,6 +788,10 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _fxBankChanged() {
+		if (this->_protocolVersion < 4) {
+			// fixme Fake FX parameters as mixer tracks.
+			return;
+		}
 		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
 			this->_selectedFx);
 		int numPages = count / BANK_NUM_SLOTS;
@@ -916,6 +949,24 @@ class NiMidiSurface: public BaseSurface {
 				this->_changeFxParamValue(index, change);
 				break;
 		}
+	}
+
+	bool _isUsingMixerForFx() {
+		return this->_protocolVersion < 4 && !this->_isBankNavForTracks;
+	}
+
+	void _navigateFx(bool next) {
+		// fixme Handle containers.
+		if (next) {
+			// fixme Don't walk past the last FX.
+			++this->_selectedFx;
+		} else {
+			if (this->_selectedFx == 0) {
+				return;
+			}
+			--this->_selectedFx;
+		}
+		this->_fxChanged();
 	}
 };
 
