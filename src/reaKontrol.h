@@ -7,6 +7,7 @@
  */
 
 #pragma once
+#define LOGGING
 
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
