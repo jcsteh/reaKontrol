@@ -436,6 +436,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
+				if (this->_isUsingMixerForFx()) {
+					this->_navigateFxBanks(value == 1);
+					break;
+				}
 				Main_OnCommand(value == 1 ?
 					40173 : // Markers: Go to next marker/project end
 					40172, // Markers: Go to previous marker/project start
