@@ -145,6 +145,7 @@ class NiMidiSurface: public BaseSurface {
 	public:
 	NiMidiSurface(int inDev, int outDev)
 	: BaseSurface(inDev, outDev) {
+		log("sending hello");
 		this->_sendCc(CMD_HELLO, 4);
 	}
 
@@ -355,6 +356,7 @@ class NiMidiSurface: public BaseSurface {
 		switch (command) {
 			case CMD_HELLO:
 				this->_protocolVersion = value;
+				log("received hello ack, protocol version " << this->_protocolVersion);
 				this->_sendCc(CMD_QUANTIZE, 1);
 				this->_sendCc(CMD_TEMPO, 1);
 				// Strictly speaking, we should only set bit 0 when we're not at the

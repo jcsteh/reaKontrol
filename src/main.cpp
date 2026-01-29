@@ -40,19 +40,26 @@ const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
 
 int getKkMidiDevice(auto countFunc, auto getFunc) {
 	int count = countFunc();
+	log(count << " total devices");
 	for (int dev = 0; dev < count; ++dev) {
 		char rawName[100];
 		const bool present = getFunc(dev, rawName, sizeof(rawName));
+		if (!rawName[0] && !present) {
+			continue;
+		}
+		log("consider dev " << dev << " \"" << rawName << "\" present " << present);
 		if (!present) {
 			continue;
 		}
 		const string_view name(rawName);
 		for (const char* suffix: KK_DEVICE_NAME_SUFFIXES) {
 			if (name.ends_with(suffix)) {
+				log("returning dev " << dev);
 				return dev;
 			}
 		}
 	}
+	log("couldn't find matching device");
 	return -1;
 }
 
@@ -126,10 +133,12 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 BaseSurface::BaseSurface(int inDev, int outDev) {
 	this->_midiIn = CreateMIDIInput(inDev);
 	if (!this->_midiIn) {
+		log("CreateMIDIInput failed");
 		return;
 	}
 	this->_midiOut = CreateMIDIOutput(outDev, false, nullptr);
 	if (!this->_midiOut) {
+		log("CreateMIDIOutput failed");
 		delete this->_midiIn;
 		this->_midiIn = nullptr;
 		return;
@@ -163,17 +172,21 @@ void BaseSurface::Run() {
 IReaperControlSurface* surface = nullptr;
 
 void connect() {
+	log("searching for MIDI input");
 	int inDev = getKkMidiDevice(GetNumMIDIInputs, GetMIDIInputName);
 	if (inDev == -1) {
 		return;
 	}
+	log("searching for MIDI output");
 	int outDev = getKkMidiDevice(GetNumMIDIOutputs, GetMIDIOutputName);
 	if (outDev == -1) {
 		return;
 	}
 	if (isMk1Connected()) {
+		log("createMcuSurface");
 		surface = createMcuSurface(inDev, outDev);
 	} else {
+		log("createNiMidiSurface");
 		surface = createNiMidiSurface(inDev, outDev);
 	}
 	plugin_register("csurf_inst", (void*)surface);
@@ -181,6 +194,7 @@ void connect() {
 
 void disconnect() {
 	if (surface) {
+		log("disconnecting");
 		plugin_register("-csurf_inst", (void*)surface);
 		delete surface;
 		surface = nullptr;
