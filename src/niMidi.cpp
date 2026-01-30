@@ -397,6 +397,8 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_CLEAR:
 			case CMD_PLAY_CLIP: // fixme
 				if (this->_protocolVersion < 4) {
+					// Toggle the mode where we use the mixer for FX parameters. See
+					// _isUsingMixerForFx.
 					this->_isBankNavForTracks = !this->_isBankNavForTracks;
 				}
 				break;
@@ -946,10 +948,15 @@ class NiMidiSurface: public BaseSurface {
 		}
 	}
 
+	// Anything earlier than S MK3 doesn't natively support non-NKS FX
+	// parameters. We fudge this by having a mode where we abuse the mixer for FX
+	// parameters. We expose each parameter as a "track", with the volume
+	// adjusting the parameter's value.
 	bool _isUsingMixerForFx() {
 		return this->_protocolVersion < 4 && !this->_isBankNavForTracks;
 	}
 
+	// Only used when using the mixer for FX (not on MK3).
 	void _navigateFx(bool next) {
 		const int topCount = TrackFX_GetCount(this->_lastSelectedTrack);
 		const bool isTopFx = this->_selectedFx < topCount;
