@@ -960,6 +960,10 @@ class NiMidiSurface: public BaseSurface {
 	void _navigateFx(bool next) {
 		const int topCount = TrackFX_GetCount(this->_lastSelectedTrack);
 		const bool isTopFx = this->_selectedFx < topCount;
+		const int parentFx = isTopFx ? -1 : this->_getParentFx(this->_selectedFx);
+		if (!isTopFx && parentFx == -1) {
+			return;
+		}
 		if (next) {
 			// If this is a container, move to its first child.
 			const int childFx = this->_getChildFx(this->_selectedFx, 0);
@@ -977,10 +981,6 @@ class NiMidiSurface: public BaseSurface {
 				return;
 			}
 			// This FX is inside a container.
-			const int parentFx = this->_getParentFx(this->_selectedFx);
-			if (parentFx == -1) {
-				return;
-			}
 			const int pos = this->_getChildFxPos(parentFx, this->_selectedFx);
 			const int siblingFx = this->_getChildFx(parentFx, pos + 1);
 			if (siblingFx != -1) {
@@ -991,7 +991,6 @@ class NiMidiSurface: public BaseSurface {
 		}
 		// We are navigating previous. Get the previous sibling, if any.
 		int siblingFx = -1;
-		const int parentFx = isTopFx ? -1 : this->_getParentFx(this->_selectedFx);
 		if (isTopFx) {
 			if (this->_selectedFx == 0) {
 				return;
@@ -1012,7 +1011,7 @@ class NiMidiSurface: public BaseSurface {
 				if (childCount == 0) {
 					break;
 				}
-				int childFx = this->_getChildFx(this->_selectedFx, childCount - 1);
+				const int childFx = this->_getChildFx(this->_selectedFx, childCount - 1);
 				if (childFx == -1) {
 					break;
 				}
