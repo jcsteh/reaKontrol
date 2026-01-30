@@ -410,8 +410,7 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
-			case CMD_CLEAR:
-			case CMD_PLAY_CLIP: // fixme
+			case CMD_PLAY_CLIP:
 				if (this->_protocolVersion < 4) {
 					// Toggle the mode where we use the mixer for FX parameters. See
 					// _isUsingMixerForFx.
