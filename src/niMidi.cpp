@@ -759,16 +759,7 @@ class NiMidiSurface: public BaseSurface {
 			if (parentFx == -1) {
 				break;
 			}
-			const int child0 = this->_getChildFx(parentFx, 0);
-			if (child0 == fx) {
-				subIndexes.push_back(0);
-			} else {
-				const int child1 = this->_getChildFx(parentFx, 1);
-				// The delta between child0 and child1 is the multiplier for children in
-				// this container.
-				const int multiplier = child1 - child0;
-				subIndexes.push_back((fx - child0) / multiplier);
-			}
+			subIndexes.push_back(this->_getChildFxPos(parentFx, fx));
 			fx = parentFx;
 		}
 		// subIndexes is ordered from deepest to shallowest. Kontrol needs shallowest
@@ -960,17 +951,91 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _navigateFx(bool next) {
-		// fixme Handle containers.
+		const int topCount = TrackFX_GetCount(this->_lastSelectedTrack);
+		const bool isTopFx = this->_selectedFx < topCount;
 		if (next) {
-			// fixme Don't walk past the last FX.
-			++this->_selectedFx;
-		} else {
+			// If this is a container, move to its first child.
+			const int childFx = this->_getChildFx(this->_selectedFx, 0);
+			if (childFx != -1) {
+				this->_selectedFx = childFx;
+				this->_fxChanged();
+				return;
+			}
+			// Otherwise, move to the next sibling.
+			if (isTopFx) {
+				if (this->_selectedFx + 1 < topCount) {
+					++this->_selectedFx;
+					this->_fxChanged();
+				}
+				return;
+			}
+			// This FX is inside a container.
+			const int parentFx = this->_getParentFx(this->_selectedFx);
+			if (parentFx == -1) {
+				return;
+			}
+			const int pos = this->_getChildFxPos(parentFx, this->_selectedFx);
+			const int siblingFx = this->_getChildFx(parentFx, pos + 1);
+			if (siblingFx != -1) {
+				this->_selectedFx = siblingFx;
+				this->_fxChanged();
+			}
+			return;
+		}
+		// We are navigating previous. Get the previous sibling, if any.
+		int siblingFx = -1;
+		const int parentFx = isTopFx ? -1 : this->_getParentFx(this->_selectedFx);
+		if (isTopFx) {
 			if (this->_selectedFx == 0) {
 				return;
 			}
-			--this->_selectedFx;
+			siblingFx = this->_selectedFx - 1;
+		} else {
+			const int pos = this->_getChildFxPos(parentFx, this->_selectedFx);
+			if (pos != 0) {
+				siblingFx = this->_getChildFx(parentFx, pos - 1);
+			}
 		}
+		if (siblingFx != -1) {
+			// Walk to the sibling's deepest, last descendant. If there isn't one,
+			// choose the sibling itself.
+			this->_selectedFx = siblingFx;
+			for (; ;) {
+				const int childCount = this->_getFxChildCount(this->_selectedFx);
+				if (childCount == 0) {
+					break;
+				}
+				int childFx = this->_getChildFx(this->_selectedFx, childCount - 1);
+				if (childFx == -1) {
+					break;
+				}
+				this->_selectedFx = childFx;
+			}
+			this->_fxChanged();
+			return;
+		}
+		// There is no previous sibling. Walk to the parent.
+		this->_selectedFx = parentFx;
 		this->_fxChanged();
+	}
+
+	int _getChildFxPos(int parentFx, int childFx) {
+		const int child0 = this->_getChildFx(parentFx, 0);
+		if (child0 == childFx) {
+			return 0;
+		}
+		const int child1 = this->_getChildFx(parentFx, 1);
+		// The delta between child0 and child1 is the multiplier for children in
+		// this container.
+		const int multiplier = child1 - child0;
+		return (childFx - child0) / multiplier;
+	}
+
+	int _getFxChildCount(int parentFx) {
+		char val[12] = "";
+		TrackFX_GetNamedConfigParm(this->_lastSelectedTrack, parentFx,
+			"container_count", val, sizeof(val));
+		return val[0] ? atoi(val) : 0;
 	}
 };
 
