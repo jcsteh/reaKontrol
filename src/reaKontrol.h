@@ -59,6 +59,8 @@
 #define REAPERAPI_WANT_TrackFX_GetNamedConfigParm
 #define REAPERAPI_WANT_TrackFX_GetParamFromIdent
 #define REAPERAPI_WANT_CSurf_OnTempoChange
+#define REAPERAPI_WANT_projectconfig_var_getoffs
+#define REAPERAPI_WANT_projectconfig_var_addr
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 

@@ -390,6 +390,9 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_REC:
 				CSurf_OnRecord();
 				break;
+			case CMD_COUNT:
+				this->_toggleCountIn();
+				break;
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
@@ -915,6 +918,21 @@ class NiMidiSurface: public BaseSurface {
 			case PARAM_GROUP_PLUGIN:
 				this->_changeFxParamValue(index, change);
 				break;
+		}
+	}
+
+	void _toggleCountIn() {
+		int size = 0;
+		const int index = projectconfig_var_getoffs("projmetroen", &size);
+		int& metro = *(int*)projectconfig_var_addr(nullptr, index);
+		if (metro & 16) {
+			// Count-in before recording is enabled. Disable it.
+			metro &= ~16;
+			this->_sendCc(CMD_COUNT, 0);
+		} else {
+			Main_OnCommand(41745, 0); // Options: Enable metronome
+			metro |= 16;
+			this->_sendCc(CMD_COUNT, 1);
 		}
 	}
 };
