@@ -1031,11 +1031,28 @@ class NiMidiSurface: public BaseSurface {
 				return;
 			}
 			// This FX is inside a container.
-			const int pos = this->_getChildFxPos(parentFx, this->_selectedFx);
-			const int siblingFx = this->_getChildFx(parentFx, pos + 1);
-			if (siblingFx != -1) {
-				this->_selectedFx = siblingFx;
-				this->_fxChanged();
+			int ancestorFx = parentFx;
+			int fx = this->_selectedFx;
+			for (; ;) {
+				// Get the next sibling.
+				if (ancestorFx == -1) {
+					// This is a top level FX.
+					if (fx + 1 < topCount) {
+						this->_selectedFx = fx + 1;
+						this->_fxChanged();
+					}
+					return;
+				}
+				const int pos = this->_getChildFxPos(ancestorFx, fx);
+				const int siblingFx = this->_getChildFx(ancestorFx, pos + 1);
+				if (siblingFx != -1) {
+					this->_selectedFx = siblingFx;
+					this->_fxChanged();
+					return;
+				}
+				// There's no next sibling, so walk to the parent and try from there.
+				fx = ancestorFx;
+				ancestorFx = this->_getParentFx(ancestorFx);
 			}
 			return;
 		}
