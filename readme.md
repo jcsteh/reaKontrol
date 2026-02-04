@@ -24,7 +24,8 @@ The following functionality is currently supported:
 - Clip navigation: moves between project markers
 - Mixer view: volume/pan adjustment with the 8 knobs
 - The track name and mute, solo and armed states are displayed as appropriate.
-- Adjustment of non- NKS FX parameters and presets (Kontrol S MK3 only).
+- Adjustment of non- NKS FX parameters.
+- Adjustment of non-NKS presets (Kontrol S MK3 only).
 
 ## Download and Installation
 For now, there is no installer.
@@ -39,6 +40,22 @@ Komplete Kontrol Host integration should work as soon as you start REAPER with a
 The one exception is if you have previously set an alias for the MIDI input or output device used for Kontrol host integration (e.g. Komplete Kontrol M DAW) in REAPER's Preferences.
 ReaKontrol searches for the original device name, so an alias will likely interfere with automatic detection of the device.
 If you have done this, you must first remove the alias (or aliases) and then reconnect ReaKontrol or restart REAPER.
+
+## Non-NKS FX Parameters
+Kontrol S MK3 has official support for non-NKS FX parameters.
+To access them, you press the Plug-in button.
+You then use the knobs to adjust parameters, the page buttons to move through banks of parameters and buttons 1 through 8 to switch plugins.
+
+Earlier Kontrol keyboards do not officially support non-NKS FX parameters.
+However, ReaKontrol supports this via the mixer mode.
+To access these parameters, you switch to mixer mode, then press the 4-d encoder.
+You then use the knobs to adjust parameters.
+If you're using a screen reader, you will need to enable OSARA's "Report changes made via control surfaces" setting to have parameter changes reported.
+Note also that touching the knobs will not provide any feedback and you will instead need to turn the knob slightly to have the parameter and value reported.
+On S MK2, you can use the page buttons to move through banks of parameters.
+On A and M series keyboards, you will need to use 4-d encoder right and left to move through banks.
+Use 4-d encoder down and up to switch plugins.
+To return to normal operation, press the 4-d encoder again.
 
 ## Reconnecting
 ReaKontrol will connect to a Kontrol keyboard when REAPER starts.

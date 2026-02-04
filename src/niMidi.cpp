@@ -75,6 +75,7 @@ const unsigned char CMD_KNOB_PAN4 = 0x5c;
 const unsigned char CMD_KNOB_PAN5 = 0x5d;
 const unsigned char CMD_KNOB_PAN6 = 0x5e;
 const unsigned char CMD_KNOB_PAN7 = 0x5f;
+const unsigned char CMD_PLAY_CLIP = 0x60;
 const unsigned char CMD_CHANGE_VOLUME = 0x64;
 const unsigned char CMD_CHANGE_PAN = 0x65;
 const unsigned char CMD_TOGGLE_MUTE = 0x66;
@@ -194,7 +195,7 @@ class NiMidiSurface: public BaseSurface {
 		this->_trackBankStart = id - numInBank;
 		if (this->_trackBankStart != oldBankStart) {
 			this->_onTrackBankChange();
-		} else if (wasAlreadySelected) {
+		} else if (wasAlreadySelected && !this->_isUsingMixerForFx()) {
 			// The track might have been renamed.
 			const char* name = (char*)GetSetMediaTrackInfo(track, "P_NAME", nullptr);
 			if (!name) {
@@ -202,23 +203,27 @@ class NiMidiSurface: public BaseSurface {
 			}
 			this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
 		}
-		this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
+		if (!this->_isUsingMixerForFx()) {
+			this->_sendSysex(CMD_TRACK_SELECTED, 1, numInBank);
+		}
 		const string kkInstance = getKkInstanceName(track);
 		this->_sendSysex(CMD_SEL_TRACK_PARAMS_CHANGED, 0, 0, kkInstance);
 		this->_initFx();
-		int trackLights = 0;
-		// 0 is the master track. We don't allow navigation to that.
-		if (id > 1) {
-			// Bit 0: previous
-			trackLights |= 1;
+		if (!this->_isUsingMixerForFx()) {
+			int trackLights = 0;
+			// 0 is the master track. We don't allow navigation to that.
+			if (id > 1) {
+				// Bit 0: previous
+				trackLights |= 1;
+			}
+			// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
+			// count the master, so the return value is the last track, not the count.
+			if (id < CSurf_NumTracks(false)) {
+				// Bit 1: next
+				trackLights |= 1 << 1;
+			}
+			this->_sendCc(CMD_NAV_TRACKS, trackLights);
 		}
-		// CSurf_TrackFromID treats 0 as the master, but CSurf_NumTracks doesn't
-		// count the master, so the return value is the last track, not the count.
-		if (id < CSurf_NumTracks(false)) {
-			// Bit 1: next
-			trackLights |= 1 << 1;
-		}
-		this->_sendCc(CMD_NAV_TRACKS, trackLights);
 	}
 
 	void SetTrackListChange() final {
@@ -227,6 +232,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void SetSurfaceVolume(MediaTrack* track, double volume) final {
+		if (this->_isUsingMixerForFx()) {
+			return;
+		}
 		const int numInBank = this->_getNumInBank(track);
 		if (numInBank != -1) {
 			char volText[64];
@@ -237,6 +245,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void SetSurfacePan(MediaTrack* track, double pan) final {
+		if (this->_isUsingMixerForFx()) {
+			return;
+		}
 		const int numInBank = this->_getNumInBank(track);
 		if (numInBank != -1) {
 			char panText[64];
@@ -247,6 +258,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void SetSurfaceMute(MediaTrack *track, bool mute) final {
+		if (this->_isUsingMixerForFx()) {
+			return;
+		}
 		const int numInBank = this->_getNumInBank(track);
 		if (numInBank != -1) {
 			this->_sendSysex(CMD_TRACK_MUTED, mute ? 1 : 0, numInBank);
@@ -254,6 +268,9 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void SetSurfaceSolo(MediaTrack *track, bool solo) final {
+		if (this->_isUsingMixerForFx()) {
+			return;
+		}
 		const int numInBank = this->_getNumInBank(track);
 		if (numInBank != -1) {
 			this->_sendSysex(CMD_TRACK_SOLOED, solo ? 1 : 0, numInBank);
@@ -262,7 +279,7 @@ class NiMidiSurface: public BaseSurface {
 
 	int Extended(int call, void* parm1, void* parm2, void* parm3) final {
 		if (call == CSURF_EXT_SETFXPARAM) {
-			if (this->_protocolVersion < 4) {
+			if (this->_protocolVersion < 4 && !this->_isUsingMixerForFx()) {
 				return 0;
 			}
 			auto track = (MediaTrack*)parm1;
@@ -287,7 +304,7 @@ class NiMidiSurface: public BaseSurface {
 				this->_initFx();
 			}
 		} else if (call == CSURF_EXT_SETBPMANDPLAYRATE) {
-			if (!parm1) {
+			if (this->_protocolVersion < 4 || !parm1) {
 				return 0;
 			}
 			double bpm = *(double*)parm1;
@@ -396,6 +413,18 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_STOP:
 				CSurf_OnStop();
 				break;
+			case CMD_PLAY_CLIP:
+				if (this->_protocolVersion < 4) {
+					// Toggle the mode where we use the mixer for FX parameters. See
+					// _isUsingMixerForFx.
+					this->_isBankNavForTracks = !this->_isBankNavForTracks;
+					if (this->_isBankNavForTracks) {
+						this->_onTrackBankChange();
+					} else {
+						this->_fxBankChanged();
+					}
+				}
+				break;
 			case CMD_LOOP:
 				Main_OnCommand(1068, 0); // Transport: Toggle repeat
 				break;
@@ -416,6 +445,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_TRACKS:
 				// Value is -1 or 1.
+				if (this->_isUsingMixerForFx()) {
+					this->_navigateFx(value == 1);
+					break;
+				}
 				this->_onNavigateTracks(value == 1);
 				break;
 			case CMD_NAV_BANKS:
@@ -428,6 +461,10 @@ class NiMidiSurface: public BaseSurface {
 				break;
 			case CMD_NAV_CLIPS:
 				// Value is -1 or 1.
+				if (this->_isUsingMixerForFx()) {
+					this->_navigateFxBanks(value == 1);
+					break;
+				}
 				Main_OnCommand(value == 1 ?
 					40173 : // Markers: Go to next marker/project end
 					40172, // Markers: Go to previous marker/project start
@@ -468,12 +505,19 @@ class NiMidiSurface: public BaseSurface {
 			case CMD_KNOB_VOLUME4:
 			case CMD_KNOB_VOLUME5:
 			case CMD_KNOB_VOLUME6:
-			case CMD_KNOB_VOLUME7:
-				if (MediaTrack* track = this->_getTrackFromNumInBank(command - CMD_KNOB_VOLUME0)) {
+			case CMD_KNOB_VOLUME7: {
+				const int numInBank = command - CMD_KNOB_VOLUME0;
+				if (this->_isUsingMixerForFx()) {
+					this->_changeFxParamValue(numInBank, convertSignedMidiValue(value) / 127.0
+						/ 8.0);
+					break;
+				}
+				if (MediaTrack* track = this->_getTrackFromNumInBank(numInBank)) {
 					CSurf_SetSurfaceVolume(track, CSurf_OnVolumeChange(track,
 						convertSignedMidiValue(value) / 127.0, true), nullptr);
 				}
 				break;
+			}
 			case CMD_KNOB_PAN0:
 			case CMD_KNOB_PAN1:
 			case CMD_KNOB_PAN2:
@@ -529,6 +573,9 @@ class NiMidiSurface: public BaseSurface {
 	double _lastChangedFxParamValue = 0;
 
 	void _onTrackBankChange() {
+		if (this->_isUsingMixerForFx()) {
+			return;
+		}
 		int numInBank = 0;
 		// bankEnd is exclusive; i.e. 1 beyond the last track in the bank.
 		int bankEnd = this->_trackBankStart + BANK_NUM_SLOTS;
@@ -661,9 +708,14 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _initFx() {
-		if (this->_protocolVersion < 4) {
-			return;
+		if (this->_protocolVersion >= 4) {
+			this->_sendPluginNames();
 		}
+		this->_selectedFx = 0;
+		this->_fxChanged();
+	}
+
+	void _sendPluginNames() {
 		ostringstream s;
 
 		// This is a recursive lambda. We pass the function to itself to work
@@ -710,11 +762,21 @@ class NiMidiSurface: public BaseSurface {
 			}
 		}
 		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
-		this->_selectedFx = 0;
-		this->_fxChanged();
 	}
 
 	void _fxChanged() {
+		if (this->_protocolVersion >= 4) {
+			this->_sendSelectPlugin();
+		}
+		this->_fxBankStart = 0;
+		this->_fxBankChanged();
+		if (this->_protocolVersion >= 4) {
+			this->_fxPresetChanged();
+		}
+		this->_lastChangedFxParam = -1;
+	}
+
+	void _sendSelectPlugin() {
 		// The REAPER FX index might be in a container. Convert it to a sequence of
 		// 0-based positions in each nested container. We need to start with the
 		// deepest FX and walk its ancestors.
@@ -725,26 +787,13 @@ class NiMidiSurface: public BaseSurface {
 			if (parentFx == -1) {
 				break;
 			}
-			const int child0 = this->_getChildFx(parentFx, 0);
-			if (child0 == fx) {
-				subIndexes.push_back(0);
-			} else {
-				const int child1 = this->_getChildFx(parentFx, 1);
-				// The delta between child0 and child1 is the multiplier for children in
-				// this container.
-				const int multiplier = child1 - child0;
-				subIndexes.push_back((fx - child0) / multiplier);
-			}
+			subIndexes.push_back(this->_getChildFxPos(parentFx, fx));
 			fx = parentFx;
 		}
 		// subIndexes is ordered from deepest to shallowest. Kontrol needs shallowest
 		// to deepest, so we iterate it in reverse.
 		this->_sendSysex(CMD_SELECT_PLUGIN, 0, fx,
 			string(subIndexes.rbegin(), subIndexes.rend()));
-		this->_fxBankStart = 0;
-		this->_fxBankChanged();
-		this->_fxPresetChanged();
-		this->_lastChangedFxParam = -1;
 	}
 
 	bool _isFxParamToggle(int param) {
@@ -769,8 +818,22 @@ class NiMidiSurface: public BaseSurface {
 			// numPages is the number of full pages. There is a final, partial page.
 			++numPages;
 		}
-		this->_sendSysex(CMD_PARAM_PAGE, numPages,
-			this->_fxBankStart / BANK_NUM_SLOTS);
+		const int page = this->_fxBankStart / BANK_NUM_SLOTS;
+		const bool isMixer = this->_isUsingMixerForFx();
+		if (isMixer) {
+			int lights = 0;
+			if (page > 0) {
+				// Bit 0: previous
+				lights |= 1;
+			}
+			if (page + 1 < numPages) {
+				// Bit 1: next
+				lights |= 1 << 1;
+			}
+			this->_sendCc(CMD_NAV_BANKS, lights);
+		} else {
+			this->_sendSysex(CMD_PARAM_PAGE, numPages, page);
+		}
 		// bankEnd is exclusive; i.e. 1 beyond the last parameter in the bank.
 		const int bankEnd = min(this->_fxBankStart + BANK_NUM_SLOTS, count);
 		int numInBank = 0;
@@ -778,9 +841,18 @@ class NiMidiSurface: public BaseSurface {
 			char name[100] = "";
 			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, p, name,
 				sizeof(name));
-			const bool isToggle = this->_isFxParamToggle(p);
-			this->_sendSysex(CMD_PARAM_NAME,
-				isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
+			if (isMixer) {
+				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
+				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
+				this->_sendSysex(CMD_TRACK_SELECTED, 0, numInBank);
+				this->_sendSysex(CMD_TRACK_SOLOED, 0, numInBank);
+				this->_sendSysex(CMD_TRACK_MUTED, 0, numInBank);
+				this->_sendSysex(CMD_TRACK_ARMED, 0, numInBank);
+			} else {
+				const bool isToggle = this->_isFxParamToggle(p);
+				this->_sendSysex(CMD_PARAM_NAME,
+					isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
+			}
 			double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, p);
 			this->_fxParamValueChanged(p, numInBank, val);
@@ -788,16 +860,23 @@ class NiMidiSurface: public BaseSurface {
 		// If there aren't sufficient parameters to fill the bank, clear the
 		// remaining slots.
 		for (; numInBank < BANK_NUM_SLOTS; ++numInBank) {
-			this->_sendSysex(CMD_PARAM_NAME, PARAM_VIS_UNIPOLAR, numInBank);
+			if (isMixer) {
+				this->_sendSysex(CMD_TRACK_AVAIL, 0, numInBank);
+			} else {
+				this->_sendSysex(CMD_PARAM_NAME, PARAM_VIS_UNIPOLAR, numInBank);
+			}
 		}
 	}
 
 	void _fxParamValueChanged(int param, int numInBank, double value) {
-		this->_sendCc(CMD_KNOB_PARAM0 + numInBank,127 * value); 
+		const bool isMixer = this->_isUsingMixerForFx();
+		unsigned char command = isMixer ? CMD_KNOB_VOLUME0 : CMD_KNOB_PARAM0;
+		this->_sendCc(command + numInBank,127 * value); 
 		char valText[100] = "";
 		TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
 			this->_selectedFx, param, value, valText, sizeof(valText));
-		this->_sendSysex(CMD_PARAM_VALUE_TEXT, 0, numInBank, valText);
+		command = isMixer ? CMD_TRACK_VOLUME_TEXT : CMD_PARAM_VALUE_TEXT;
+		this->_sendSysex(command, 0, numInBank, valText);
 	}
 
 	void _navigateFxBanks(bool next) {
@@ -934,6 +1013,119 @@ class NiMidiSurface: public BaseSurface {
 			metro |= 16;
 			this->_sendCc(CMD_COUNT, 1);
 		}
+	}
+
+	// Anything earlier than S MK3 doesn't natively support non-NKS FX
+	// parameters. We fudge this by having a mode where we abuse the mixer for FX
+	// parameters. We expose each parameter as a "track", with the volume
+	// adjusting the parameter's value.
+	bool _isUsingMixerForFx() {
+		return this->_protocolVersion < 4 && !this->_isBankNavForTracks;
+	}
+
+	// Only used when using the mixer for FX (not on MK3).
+	void _navigateFx(bool next) {
+		const int topCount = TrackFX_GetCount(this->_lastSelectedTrack);
+		const bool isTopFx = this->_selectedFx < topCount;
+		const int parentFx = isTopFx ? -1 : this->_getParentFx(this->_selectedFx);
+		if (!isTopFx && parentFx == -1) {
+			return;
+		}
+		if (next) {
+			// If this is a container, move to its first child.
+			const int childFx = this->_getChildFx(this->_selectedFx, 0);
+			if (childFx != -1) {
+				this->_selectedFx = childFx;
+				this->_fxChanged();
+				return;
+			}
+			// Otherwise, move to the next sibling.
+			if (isTopFx) {
+				if (this->_selectedFx + 1 < topCount) {
+					++this->_selectedFx;
+					this->_fxChanged();
+				}
+				return;
+			}
+			// This FX is inside a container.
+			int ancestorFx = parentFx;
+			int fx = this->_selectedFx;
+			for (; ;) {
+				// Get the next sibling.
+				if (ancestorFx == -1) {
+					// This is a top level FX.
+					if (fx + 1 < topCount) {
+						this->_selectedFx = fx + 1;
+						this->_fxChanged();
+					}
+					return;
+				}
+				const int pos = this->_getChildFxPos(ancestorFx, fx);
+				const int siblingFx = this->_getChildFx(ancestorFx, pos + 1);
+				if (siblingFx != -1) {
+					this->_selectedFx = siblingFx;
+					this->_fxChanged();
+					return;
+				}
+				// There's no next sibling, so walk to the parent and try from there.
+				fx = ancestorFx;
+				ancestorFx = this->_getParentFx(ancestorFx);
+			}
+			return;
+		}
+		// We are navigating previous. Get the previous sibling, if any.
+		int siblingFx = -1;
+		if (isTopFx) {
+			if (this->_selectedFx == 0) {
+				return;
+			}
+			siblingFx = this->_selectedFx - 1;
+		} else {
+			const int pos = this->_getChildFxPos(parentFx, this->_selectedFx);
+			if (pos != 0) {
+				siblingFx = this->_getChildFx(parentFx, pos - 1);
+			}
+		}
+		if (siblingFx != -1) {
+			// Walk to the sibling's deepest, last descendant. If there isn't one,
+			// choose the sibling itself.
+			this->_selectedFx = siblingFx;
+			for (; ;) {
+				const int childCount = this->_getFxChildCount(this->_selectedFx);
+				if (childCount == 0) {
+					break;
+				}
+				const int childFx = this->_getChildFx(this->_selectedFx, childCount - 1);
+				if (childFx == -1) {
+					break;
+				}
+				this->_selectedFx = childFx;
+			}
+			this->_fxChanged();
+			return;
+		}
+		// There is no previous sibling. Walk to the parent.
+		this->_selectedFx = parentFx;
+		this->_fxChanged();
+	}
+
+	int _getChildFxPos(int parentFx, int childFx) {
+		const int child0 = this->_getChildFx(parentFx, 0);
+		if (child0 == childFx) {
+			return 0;
+		}
+		const int child1 = this->_getChildFx(parentFx, 1);
+		// The delta between child0 and child1 is the multiplier for children in
+		// this container.
+		const int multiplier = child1 - child0;
+		return (childFx - child0) / multiplier;
+	}
+
+	int _getFxChildCount(int parentFx) {
+		char val[12] = "";
+		TrackFX_GetNamedConfigParm(this->_lastSelectedTrack, parentFx,
+			"container_count", val, sizeof(val));
+		return val[0] ? atoi(val) : 0;
 	}
 };
 
