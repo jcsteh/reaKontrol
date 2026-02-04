@@ -372,7 +372,7 @@ class NiMidiSurface: public BaseSurface {
 		unsigned char& value = event->midi_message[2];
 		switch (command) {
 			case CMD_HELLO:
-				this->_protocolVersion = 3;// fixme: value;
+				this->_protocolVersion = value;
 				log("received hello ack, protocol version " << this->_protocolVersion);
 				this->_sendCc(CMD_QUANTIZE, 1);
 				this->_sendCc(CMD_TEMPO, 1);
