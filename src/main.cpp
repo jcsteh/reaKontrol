@@ -38,6 +38,8 @@ const char KKMK1_HWID_PREFIX[] = "USB\\VID_17CC&PID_";
 const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
 
+void (*osara_outputMessage)(const char* message) = nullptr;
+
 int getKkMidiDevice(auto countFunc, auto getFunc) {
 	int count = countFunc();
 	log(count << " total devices");
@@ -214,6 +216,12 @@ bool handleCommand(KbdSectionInfo* section, int command, int val, int valHw,
 	return false;
 }
 
+void delayedInit() {
+	plugin_register("-timer", (void*)delayedInit);
+	osara_outputMessage = (decltype(osara_outputMessage))plugin_getapi(
+		"osara_outputMessage");
+}
+
 extern "C" {
 
 REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hInstance, reaper_plugin_info_t* rec) {
@@ -228,6 +236,7 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 			"ReaKontrol: Reconnect"};
 		CMD_RECONNECT = rec->Register("custom_action", &action);
 		rec->Register("hookcommand2", (void*)handleCommand);
+		rec->Register("timer", (void*)delayedInit);
 		return 1;
 	} else {
 		// Unload.

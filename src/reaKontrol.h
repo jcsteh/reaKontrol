@@ -61,6 +61,7 @@
 #define REAPERAPI_WANT_CSurf_OnTempoChange
 #define REAPERAPI_WANT_projectconfig_var_getoffs
 #define REAPERAPI_WANT_projectconfig_var_addr
+#define REAPERAPI_WANT_plugin_getapi
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
@@ -94,3 +95,5 @@ class BaseSurface: public IReaperControlSurface {
 
 IReaperControlSurface* createNiMidiSurface(int inDev, int outDev);
 IReaperControlSurface* createMcuSurface(int inDev, int outDev);
+
+extern void (*osara_outputMessage)(const char* message);
