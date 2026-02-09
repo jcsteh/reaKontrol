@@ -43,17 +43,17 @@ If you have done this, you must first remove the alias (or aliases) and then rec
 
 ## Non-NKS FX Parameters
 Kontrol S MK3 has official support for non-NKS FX parameters.
-To access them, you press the Plug-in button.
+Press the Plug-in button to access them.
 You then use the knobs to adjust parameters, the page buttons to move through banks of parameters and buttons 1 through 8 to switch plugins.
 
 Earlier Kontrol keyboards do not officially support non-NKS FX parameters.
-However, ReaKontrol supports this via the mixer mode.
-To access these parameters, you switch to mixer mode, then press the 4-d encoder.
+However, ReaKontrol provides support for this.
+To access them, press the Mixer button on S MK2, or Track button on A/M series keyboards, then press the 4-d encoder.
 You then use the knobs to adjust parameters.
 If you're using a screen reader, you will need to enable OSARA's "Report changes made via control surfaces" setting to have parameter changes reported.
 Note also that touching the knobs will not provide any feedback and you will instead need to turn the knob slightly to have the parameter and value reported.
 On S MK2, you can use the page buttons to move through banks of parameters.
-On A and M series keyboards, you will need to use 4-d encoder right and left to move through banks.
+On A and M series keyboards, pulling the 4-d encoder right and left moves through banks instead.
 Use 4-d encoder down and up to switch plugins.
 To return to normal operation, press the 4-d encoder again.
 
