@@ -47,7 +47,7 @@ Press the Plug-in button to access them.
 You then use the knobs to adjust parameters, the page buttons to move through banks of parameters and buttons 1 through 8 to switch plugins.
 
 Earlier Kontrol keyboards do not officially support non-NKS FX parameters.
-However, ReaKontrol supports this via its mixer mode.
+However, ReaKontrol provides support for this.
 To access them, press the Mixer button on S MK2, or Track button on A/M series keyboards, then press the 4-d encoder.
 You then use the knobs to adjust parameters.
 If you're using a screen reader, you will need to enable OSARA's "Report changes made via control surfaces" setting to have parameter changes reported.
