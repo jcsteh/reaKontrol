@@ -419,9 +419,15 @@ class NiMidiSurface: public BaseSurface {
 					// _isUsingMixerForFx.
 					this->_isBankNavForTracks = !this->_isBankNavForTracks;
 					if (this->_isBankNavForTracks) {
+						if (osara_outputMessage) {
+							osara_outputMessage("tracks");
+						}
 						this->_onTrackBankChange();
 					} else {
-						this->_fxBankChanged();
+						if (osara_outputMessage) {
+							osara_outputMessage("FX");
+						}
+						this->_fxBankChanged(/* shouldOutputOsaraMessage */ false);
 					}
 				}
 				break;
@@ -712,7 +718,7 @@ class NiMidiSurface: public BaseSurface {
 			this->_sendPluginNames();
 		}
 		this->_selectedFx = 0;
-		this->_fxChanged();
+		this->_fxChanged(/* shouldOutputOsaraMessage */ false);
 	}
 
 	void _sendPluginNames() {
@@ -764,12 +770,17 @@ class NiMidiSurface: public BaseSurface {
 		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
 	}
 
-	void _fxChanged() {
+	void _fxChanged(bool shouldOutputOsaraMessage = true) {
 		if (this->_protocolVersion >= 4) {
 			this->_sendSelectPlugin();
+		} else if (shouldOutputOsaraMessage && osara_outputMessage) {
+			char name[100];
+			TrackFX_GetFXName(this->_lastSelectedTrack, this->_selectedFx, name,
+				sizeof(name));
+			osara_outputMessage(name);
 		}
 		this->_fxBankStart = 0;
-		this->_fxBankChanged();
+		this->_fxBankChanged(/* shouldOutputOsaraMessage */ false);
 		if (this->_protocolVersion >= 4) {
 			this->_fxPresetChanged();
 		}
@@ -810,7 +821,7 @@ class NiMidiSurface: public BaseSurface {
 		return isToggle;
 	}
 
-	void _fxBankChanged() {
+	void _fxBankChanged(bool shouldOutputOsaraMessage = true) {
 		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
 			this->_selectedFx);
 		int numPages = count / BANK_NUM_SLOTS;
@@ -831,6 +842,11 @@ class NiMidiSurface: public BaseSurface {
 				lights |= 1 << 1;
 			}
 			this->_sendCc(CMD_NAV_BANKS, lights);
+			if (shouldOutputOsaraMessage && osara_outputMessage) {
+				ostringstream s;
+				s << "page " << page + 1;
+				osara_outputMessage(s.str().c_str());
+			}
 		} else {
 			this->_sendSysex(CMD_PARAM_PAGE, numPages, page);
 		}
