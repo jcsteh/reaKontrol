@@ -78,6 +78,7 @@ reverb: # This is a section name for the following knobs.
 
 ReaKontrol can help you create these maps.
 First, select the FX you want to work with using your Kontrol keyboard.
+Note that the first FX (if any) will be automatically selected when you navigate to a track.
 Then, run the "ReaKontrol: Generate map file for selected FX" action and it will generate the appropriate map file with all the parameter numbers and their names as comments.
 
 ## Reconnecting
