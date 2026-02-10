@@ -8,6 +8,9 @@
 
 #pragma once
 
+#include <map>
+#include <vector>
+
 class MediaTrack;
 
 class FxMap {
@@ -21,4 +24,6 @@ class FxMap {
 	private:
 	MediaTrack* _track = nullptr;
 	int _fx = -1;
+	std::vector<int> _reaperParams;
+	std::map<int, int> _mapParams;
 };
