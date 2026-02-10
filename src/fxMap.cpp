@@ -170,6 +170,6 @@ void FxMap::generateMapFileForSelectedFx() {
 	for (int p = 0; p < count; ++p) {
 		char name[100];
 		TrackFX_GetParamName(lastTrack, lastFx, p, name, sizeof(name));
-		output << p << " #" << name << std::endl;
+		output << p << " # " << name << std::endl;
 	}
 }
