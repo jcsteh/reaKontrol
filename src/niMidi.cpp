@@ -847,6 +847,10 @@ class NiMidiSurface: public BaseSurface {
 			if (shouldOutputOsaraMessage && osara_outputMessage) {
 				ostringstream s;
 				s << "page " << page + 1;
+				string sections = this->_fxMap.getSectionsForPage(this->_fxBankStart);
+				if (!sections.empty()) {
+					s << sections;
+				}
 				osara_outputMessage(s.str().c_str());
 			}
 		} else {
@@ -879,6 +883,8 @@ class NiMidiSurface: public BaseSurface {
 				const bool isToggle = this->_isFxParamToggle(rp);
 				this->_sendSysex(CMD_PARAM_NAME,
 					isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
+				string section = this->_fxMap.getSection(mp);
+				this->_sendSysex(CMD_PARAM_SECTION, 0, numInBank, section);
 			}
 			double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, rp);

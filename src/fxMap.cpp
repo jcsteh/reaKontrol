@@ -31,6 +31,8 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			"(\\d+)"
 			// Group 2: or a page break indicator.
 			"|(---)"
+			// Group 3: or a section name ending with a colon.
+			"|([^#]+):"
 			")?"
 			// This may be followed by optional space and an optional comment starting
 			// with "#".
@@ -56,6 +58,11 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			while (this->_reaperParams.size() % BANK_NUM_SLOTS != 0) {
 				this->_reaperParams.push_back(-1);
 			}
+			continue;
+		}
+		const std::string section = m.str(3);
+		if (!section.empty()) {
+			this->_sections.insert({this->_reaperParams.size(), section});
 		}
 	}
 	log("loaded " << this->_mapParams.size() << " params from FX map");
@@ -84,4 +91,30 @@ int FxMap::getMapParam(int reaperParam) const {
 		return -1;
 	}
 	return it->second;
+}
+
+std::string FxMap::getSection(int mapParam) const {
+	auto it = this->_sections.find(mapParam);
+	if (it == this->_sections.end()) {
+		return "";
+	}
+	return it->second;
+}
+
+std::string FxMap::getSectionsForPage(int mapParam) const {
+	std::ostringstream s;
+	int bankEnd = mapParam + BANK_NUM_SLOTS;
+	if (bankEnd > this->_reaperParams.size()) {
+		bankEnd = this->_reaperParams.size();
+	}
+	for (; mapParam < bankEnd; ++mapParam) {
+		std::string section = this->getSection(mapParam);
+		if (!section.empty()) {
+			if (s.tellp() > 0) {
+				s << ", ";
+			}
+			s << section;
+		}
+	}
+	return s.str();
 }
