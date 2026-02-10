@@ -18,6 +18,7 @@
 #include "swell.h"
 #endif
 #define REAPERAPI_IMPLEMENT
+#include "fxMap.h"
 #include "reaKontrol.h"
 
 using namespace std;
@@ -204,6 +205,7 @@ void disconnect() {
 }
 
 int CMD_RECONNECT = 0;
+int CMD_GENERATE_FX_MAP = 0;
 
 bool handleCommand(KbdSectionInfo* section, int command, int val, int valHw,
 	int relMode, HWND hwnd
@@ -212,6 +214,9 @@ bool handleCommand(KbdSectionInfo* section, int command, int val, int valHw,
 		disconnect();
 		connect();
 		return true;
+	}
+	if (command == CMD_GENERATE_FX_MAP) {
+		FxMap::generateMapFileForSelectedFx();
 	}
 	return false;
 }
@@ -235,6 +240,9 @@ REAPER_PLUGIN_DLL_EXPORT int REAPER_PLUGIN_ENTRYPOINT(REAPER_PLUGIN_HINSTANCE hI
 		custom_action_register_t action = {MAIN_SECTION, "REAKONTROL_RECONNECT",
 			"ReaKontrol: Reconnect"};
 		CMD_RECONNECT = rec->Register("custom_action", &action);
+		action = {MAIN_SECTION, "REAKONTROL_GENFXMAP",
+			"ReaKontrol: Generate map file for selected FX"};
+		CMD_GENERATE_FX_MAP = rec->Register("custom_action", &action);
 		rec->Register("hookcommand2", (void*)handleCommand);
 		rec->Register("timer", (void*)delayedInit);
 		return 1;

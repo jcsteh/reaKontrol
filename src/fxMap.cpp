@@ -1,23 +1,53 @@
+/*
+ * ReaKontrol
+ * FX Map code
+ * Author: James Teh <jamie@jantrid.net>
+ * Copyright 2026 James Teh
+ * License: GNU General Public License version 2.0
+ */
+
+#include <filesystem>
 #include <fstream>
 #include <regex>
 #include <string>
 #include "fxMap.h"
 #include "reaKontrol.h"
 
-FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
+// The generateMapFileForSelectedFx action can't access the FxMap instance,
+// so we cache the last selected FX here.
+static MediaTrack* lastTrack = nullptr;
+static int lastFx = -1;
+
+static std::string getFxMapDir() {
+	std::string path(GetResourcePath());
+	path += "/reaKontrol/fxMaps";
+	return path;
+}
+
+static std::string getFxMapFileName(MediaTrack* track, int fx) {
 	char name[100] = "";
-	TrackFX_GetFXName(this->_track, this->_fx, name, sizeof(name));
+	TrackFX_GetFXName(track, fx, name, sizeof(name));
 	if (!name[0]) {
 		// This will happen when there are no FX on this track.
-		return;
+		return "";
 	}
-	std::string path(GetResourcePath());
-	path += "/reaKontrol/fxMaps/";
+	std::string path = getFxMapDir();
+	path += "/";
 	path += name;
 	path += ".rkfm";
+	return path;
+}
+
+FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
+	lastTrack = track;
+	lastFx = fx;
+	const std::string path = getFxMapFileName(track, fx);
+	if (path.empty()) {
+		return;
+	}
 	std::ifstream input(path);
 	if (!input) {
-		log("no FX map for " << name);
+		log("no FX map " << path);
 		return;
 	}
 	log("loading FX map " << path);
@@ -117,4 +147,24 @@ std::string FxMap::getSectionsForPage(int mapParam) const {
 		}
 	}
 	return s.str();
+}
+
+void FxMap::generateMapFileForSelectedFx() {
+	const std::string fn = getFxMapFileName(lastTrack, lastFx);
+	if (fn.empty()) {
+		// No selected FX.
+		return;
+	}
+	const std::string dir = getFxMapDir();
+	std::filesystem::create_directories(dir);
+	std::ofstream output(fn);
+	if (!output) {
+		return;
+	}
+	const int count = TrackFX_GetNumParams(lastTrack, lastFx);
+	for (int p = 0; p < count; ++p) {
+		char name[100];
+		TrackFX_GetParamName(lastTrack, lastFx, p, name, sizeof(name));
+		output << p << " #" << name << std::endl;
+	}
 }

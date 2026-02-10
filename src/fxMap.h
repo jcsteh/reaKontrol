@@ -24,6 +24,8 @@ class FxMap {
 	std::string getSection(int mapParam) const;
 	std::string getSectionsForPage(int mapParam) const;
 
+	static void generateMapFileForSelectedFx();
+
 	private:
 	MediaTrack* _track = nullptr;
 	int _fx = -1;
