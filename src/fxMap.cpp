@@ -33,7 +33,12 @@ static std::string getFxMapFileName(MediaTrack* track, int fx) {
 	}
 	std::string path = getFxMapDir();
 	path += "/";
-	path += name;
+	for (char* c = name; *c; ++c) {
+		if (*c == '/' || *c == '\\' || *c == ':') {
+			continue;
+		}
+		path += *c;
+	}
 	path += ".rkfm";
 	return path;
 }
