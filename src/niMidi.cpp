@@ -13,6 +13,7 @@
 #include <vector>
 #include <WDL/db2val.h>
 #include <cstring>
+#include "fxMap.h"
 #include "reaKontrol.h"
 
 using namespace std;
@@ -291,11 +292,12 @@ class NiMidiSurface: public BaseSurface {
 				return 0;
 			}
 			int param = *(int*)parm2 & 0xFFFF;
-			if (param < this->_fxBankStart || param >= this->_fxBankStart + BANK_NUM_SLOTS) {
+			const int mp = this->_fxMap.getMapParam(param);
+			if (mp < this->_fxBankStart || mp >= this->_fxBankStart + BANK_NUM_SLOTS) {
 				return 0;
 			}
 			double normVal = *(double*)parm3;
-			const int numInBank = param - this->_fxBankStart;
+			const int numInBank = mp - this->_fxBankStart;
 			this->_fxParamValueChanged(param, numInBank, normVal);
 		} else if (call == CSURF_EXT_SETFXCHANGE) {
 			// FX were added, removed or reordered.
@@ -577,6 +579,7 @@ class NiMidiSurface: public BaseSurface {
 	int _fxBankStart = 0;
 	int _lastChangedFxParam = -1;
 	double _lastChangedFxParamValue = 0;
+	FxMap _fxMap;
 
 	void _onTrackBankChange() {
 		if (this->_isUsingMixerForFx()) {
@@ -779,6 +782,7 @@ class NiMidiSurface: public BaseSurface {
 				sizeof(name));
 			osara_outputMessage(name);
 		}
+		this->_fxMap = FxMap(this->_lastSelectedTrack, this->_selectedFx);
 		this->_fxBankStart = 0;
 		this->_fxBankChanged(/* shouldOutputOsaraMessage */ false);
 		if (this->_protocolVersion >= 4) {
@@ -822,8 +826,7 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _fxBankChanged(bool shouldOutputOsaraMessage = true) {
-		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
-			this->_selectedFx);
+		const int count = this->_fxMap.getParamCount();
 		int numPages = count / BANK_NUM_SLOTS;
 		if (count % BANK_NUM_SLOTS) {
 			// numPages is the number of full pages. There is a final, partial page.
@@ -853,9 +856,10 @@ class NiMidiSurface: public BaseSurface {
 		// bankEnd is exclusive; i.e. 1 beyond the last parameter in the bank.
 		const int bankEnd = min(this->_fxBankStart + BANK_NUM_SLOTS, count);
 		int numInBank = 0;
-		for (int p = this->_fxBankStart; p < bankEnd; ++p, ++numInBank) {
+		for (int mp = this->_fxBankStart; mp < bankEnd; ++mp, ++numInBank) {
+			const int rp = this->_fxMap.getReaperParam(mp);
 			char name[100] = "";
-			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, p, name,
+			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, rp, name,
 				sizeof(name));
 			if (isMixer) {
 				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
@@ -865,13 +869,13 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendSysex(CMD_TRACK_MUTED, 0, numInBank);
 				this->_sendSysex(CMD_TRACK_ARMED, 0, numInBank);
 			} else {
-				const bool isToggle = this->_isFxParamToggle(p);
+				const bool isToggle = this->_isFxParamToggle(rp);
 				this->_sendSysex(CMD_PARAM_NAME,
 					isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
 			}
 			double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
-				this->_selectedFx, p);
-			this->_fxParamValueChanged(p, numInBank, val);
+				this->_selectedFx, rp);
+			this->_fxParamValueChanged(rp, numInBank, val);
 		}
 		// If there aren't sufficient parameters to fill the bank, clear the
 		// remaining slots.
@@ -902,8 +906,7 @@ class NiMidiSurface: public BaseSurface {
 		} else {
 			newBankStart -= BANK_NUM_SLOTS;
 		}
-		const int count = TrackFX_GetNumParams(this->_lastSelectedTrack,
-			this->_selectedFx);
+		const int count = this->_fxMap.getParamCount();
 		if (newBankStart < 0 || newBankStart >= count) {
 			return;
 		}
@@ -912,7 +915,8 @@ class NiMidiSurface: public BaseSurface {
 	}
 
 	void _changeFxParamValue(int numInBank, double change) {
-		int param = this->_fxBankStart + numInBank;
+		const int mp = this->_fxBankStart + numInBank;
+		const int param = this->_fxMap.getReaperParam(mp);
 		double val ;
 		if (param == this->_lastChangedFxParam) {
 			// Some parameters snap to defined values when you set them. This means that

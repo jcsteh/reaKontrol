@@ -8,6 +8,7 @@ Import("env")
 env.Append(CPPPATH=("#include", "#include/WDL"))
 
 sources = [
+	"fxMap.cpp",
 	"main.cpp",
 	"niMidi.cpp",
 	"mcu.cpp",

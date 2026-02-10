@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <string>
+
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
 #define REAPERAPI_WANT_GetMIDIInputName
