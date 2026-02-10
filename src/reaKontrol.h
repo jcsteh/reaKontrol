@@ -79,6 +79,8 @@
 # define log(msg)
 #endif
 
+constexpr int BANK_NUM_SLOTS = 8;
+
 const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 
 class BaseSurface: public IReaperControlSurface {

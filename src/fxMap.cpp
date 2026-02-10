@@ -26,8 +26,12 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 		static const std::regex RE_LINE(
 			// Ignore any space at the start of a line.
 			"^\\s*"
-			// Group 1: the line may start with a parameter number.
-			"(\\d+)?"
+			"(?:"
+			// Group 1: the line may be a parameter number.
+			"(\\d+)"
+			// Group 2: or a page break indicator.
+			"|(---)"
+			")?"
 			// This may be followed by optional space and an optional comment starting
 			// with "#".
 			"\\s*(?:#.*)?$"
@@ -38,15 +42,23 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			log("invalid FX map line: " << line);
 			continue;
 		}
-		std::string numStr = m.str(1);
+		const std::string numStr = m.str(1);
 		if (!numStr.empty()) {
 			const int rp = std::atoi(numStr.c_str());
 			const int mp = this->_reaperParams.size();
 			this->_reaperParams.push_back(rp);
 			this->_mapParams.insert({rp, mp});
+			continue;
+		}
+		if (!m.str(2).empty()) {
+			// A page break has been requested. Any remaining slots on this page
+			// should be empty.
+			while (this->_reaperParams.size() % BANK_NUM_SLOTS != 0) {
+				this->_reaperParams.push_back(-1);
+			}
 		}
 	}
-	log("loaded " << this->_reaperParams.size() << " params from FX map");
+	log("loaded " << this->_mapParams.size() << " params from FX map");
 }
 
 int FxMap::getParamCount() const {
@@ -68,5 +80,8 @@ int FxMap::getMapParam(int reaperParam) const {
 		return reaperParam;
 	}
 	auto it = this->_mapParams.find(reaperParam);
+	if (it == this->_mapParams.end()) {
+		return -1;
+	}
 	return it->second;
 }

@@ -22,7 +22,6 @@ const unsigned char MIDI_CC = 0xBF;
 const unsigned char MIDI_SYSEX_BEGIN[] = {
 	0xF0, 0x00, 0x21, 0x09, 0x00, 0x00, 0x44, 0x43, 0x01, 0x00};
 const unsigned char MIDI_SYSEX_END = 0xF7;
-const int BANK_NUM_SLOTS = 8;
 
 const unsigned char CMD_HELLO = 0x01;
 const unsigned char CMD_GOODBYE = 0x02;
@@ -858,6 +857,14 @@ class NiMidiSurface: public BaseSurface {
 		int numInBank = 0;
 		for (int mp = this->_fxBankStart; mp < bankEnd; ++mp, ++numInBank) {
 			const int rp = this->_fxMap.getReaperParam(mp);
+			if (rp == -1) {
+				if (isMixer) {
+					this->_sendSysex(CMD_TRACK_AVAIL, 0, numInBank);
+				} else {
+					this->_sendSysex(CMD_PARAM_NAME, PARAM_VIS_UNIPOLAR, numInBank);
+				}
+				continue;
+			}
 			char name[100] = "";
 			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, rp, name,
 				sizeof(name));
@@ -917,6 +924,9 @@ class NiMidiSurface: public BaseSurface {
 	void _changeFxParamValue(int numInBank, double change) {
 		const int mp = this->_fxBankStart + numInBank;
 		const int param = this->_fxMap.getReaperParam(mp);
+		if (param == -1) {
+			return;
+		}
 		double val ;
 		if (param == this->_lastChangedFxParam) {
 			// Some parameters snap to defined values when you set them. This means that
