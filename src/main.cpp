@@ -217,6 +217,7 @@ bool handleCommand(KbdSectionInfo* section, int command, int val, int valHw,
 	}
 	if (command == CMD_GENERATE_FX_MAP) {
 		FxMap::generateMapFileForSelectedFx();
+		return true;
 	}
 	return false;
 }
