@@ -249,8 +249,8 @@ void FxMap::generateMapFileForSelectedFx() {
 	}
 	output.close();
 	// Locate the file in Explorer/Finder.
-	std::basic_ostringstream<char8_t> params;
-	params << u8"/select," << fn.u8string();
-	ShellExecute(nullptr, "open", "explorer.exe", (char*)params.str().c_str(),
+	std::u8string params(u8"/select,");
+	params += fn.u8string();
+	ShellExecute(nullptr, "open", "explorer.exe", (const char*)params.c_str(),
 		nullptr, SW_SHOW);
 }
