@@ -31,7 +31,7 @@ def writeIndex(data):
 		bodyMd,
 		flags=re.DOTALL
 	)
-	bodyHtml = markdown.markdown(bodyMd)
+	bodyHtml = markdown.markdown(bodyMd, extensions=["fenced_code"])
 	print("Writing index")
 	with open(INDEX_FILE, "w") as f:
 		f.write('<html>\n'
