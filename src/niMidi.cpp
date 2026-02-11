@@ -732,14 +732,13 @@ class NiMidiSurface: public BaseSurface {
 		auto addContainer = [&s, this](int parentFx, auto&& addContainer) -> void {
 			// Containers are represented using JSON.
 			s << "{\"n\":\"";
-			char name[100] = "";
-			TrackFX_GetFXName(this->_lastSelectedTrack, parentFx, name, sizeof(name));
+			const string name = FxMap::getMapNameFor(this->_lastSelectedTrack, parentFx);
 			// Escape any quote characters in the name.
-			for (char* n = name; *n; ++n) {
-				if (*n == '"') {
+			for (char n : name) {
+				if (n == '"') {
 					s << "\\";
 				}
-				s << *n;
+				s << n;
 			}
 			s << "\",\"c\":[";
 			for (int c = 0; ; ++c) {
@@ -764,24 +763,20 @@ class NiMidiSurface: public BaseSurface {
 				// This is a container.
 				addContainer(f, addContainer);
 			} else {
-				char name[100] = "";
-				TrackFX_GetFXName(this->_lastSelectedTrack, f, name, sizeof(name));
-				s << name;
+				s << FxMap::getMapNameFor(this->_lastSelectedTrack, f);
 			}
 		}
 		this->_sendSysex(CMD_PLUGIN_NAMES, 0, 0, s.str());
 	}
 
 	void _fxChanged(bool shouldOutputOsaraMessage = true) {
+		this->_fxMap = FxMap(this->_lastSelectedTrack, this->_selectedFx);
 		if (this->_protocolVersion >= 4) {
 			this->_sendSelectPlugin();
 		} else if (shouldOutputOsaraMessage && osara_outputMessage) {
-			char name[100];
-			TrackFX_GetFXName(this->_lastSelectedTrack, this->_selectedFx, name,
-				sizeof(name));
-			osara_outputMessage(name);
+			osara_outputMessage(FxMap::getMapNameFor(this->_lastSelectedTrack,
+				this->_selectedFx).c_str());
 		}
-		this->_fxMap = FxMap(this->_lastSelectedTrack, this->_selectedFx);
 		this->_fxBankStart = 0;
 		this->_fxBankChanged(/* shouldOutputOsaraMessage */ false);
 		if (this->_protocolVersion >= 4) {
@@ -869,9 +864,7 @@ class NiMidiSurface: public BaseSurface {
 				}
 				continue;
 			}
-			char name[100] = "";
-			TrackFX_GetParamName(this->_lastSelectedTrack, this->_selectedFx, rp, name,
-				sizeof(name));
+			const string name = this->_fxMap.getParamName(mp);
 			if (isMixer) {
 				this->_sendSysex(CMD_TRACK_AVAIL, TRTYPE_UNSPEC, numInBank);
 				this->_sendSysex(CMD_TRACK_NAME, 0, numInBank, name);
