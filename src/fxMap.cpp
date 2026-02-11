@@ -87,7 +87,7 @@ static std::wstring getPathForStd(const std::string& fileName) {
 	}
 }
 #else
-static std::wstring getPathForStd(const std::string& fileName) {
+static std::string getPathForStd(const std::string& fileName) {
 	return fileName;
 }
 #endif
