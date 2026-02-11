@@ -7,8 +7,8 @@
  */
 
 #ifdef _WIN32
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 // Must be defined before any C++ STL header is included.
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
 #include <codecvt>
 #endif
 
