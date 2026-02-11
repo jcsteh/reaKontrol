@@ -6,6 +6,12 @@
  * License: GNU General Public License version 2.0
  */
 
+#ifdef _WIN32
+#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+// Must be defined before any C++ STL header is included.
+#include <codecvt>
+#endif
+
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -62,6 +68,30 @@ static std::string getFxMapFileName(MediaTrack* track, int fx) {
 	return path;
 }
 
+#ifdef _WIN32
+static std::wstring getPathForStd(const std::string& fileName) {
+	// REAPER provides UTF-8 strings. However, on Windows, C++ std will
+	// interpret a narrow (8 bit) string as an ANSI string. The easiest way to
+	// deal with this is to convert the string to UTF-16, which Windows will
+	// interpret correctly.
+	static std::wstring_convert<std::codecvt_utf8_utf16<WCHAR>, WCHAR> utf8Utf16;
+	try {
+		return utf8Utf16.from_bytes(fileName);
+	} catch (std::range_error) {
+		// Invalid UTF-8. This really shouldn't happen, but just in case, this hack
+		// just widens the string without any encoding conversion. This may result in
+		// strange characters, but it's better than a crash.
+		std::wostringstream s;
+		s << fileName.c_str();
+		return s.str();
+	}
+}
+#else
+static std::wstring getPathForStd(const std::string& fileName) {
+	return fileName;
+}
+#endif
+
 FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 	lastTrack = track;
 	lastFx = fx;
@@ -69,7 +99,7 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 	if (path.empty()) {
 		return;
 	}
-	std::ifstream input(path);
+	std::ifstream input(getPathForStd(path));
 	if (!input) {
 		log("no FX map " << path);
 		return;
@@ -201,7 +231,7 @@ std::string FxMap::getMapNameFor(MediaTrack* track, int fx) {
 	if (path.empty()) {
 		return getOrigName();
 	}
-	std::ifstream input(path);
+	std::ifstream input(getPathForStd(path));
 	if (!input) {
 		return getOrigName();
 	}
@@ -231,8 +261,8 @@ void FxMap::generateMapFileForSelectedFx() {
 		return;
 	}
 	const std::string dir = getFxMapDir();
-	std::filesystem::create_directories(dir);
-	std::ofstream output(fn);
+	std::filesystem::create_directories(getPathForStd(dir));
+	std::ofstream output(getPathForStd(fn));
 	if (!output) {
 		return;
 	}
