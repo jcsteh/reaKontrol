@@ -57,6 +57,31 @@ On A and M series keyboards, pulling the 4-d encoder right and left moves throug
 Use 4-d encoder down and up to switch plugins.
 To return to normal operation, press the 4-d encoder again.
 
+## Configurable Mapping of Non-NKS FX Parameters
+By default, all FX parameters are mapped to pages and knobs on the Kontrol keyboard.
+For plugins with many parameters, this might not be efficient.
+ReaKontrol enables you to specify how parameters are mapped to Kontrol knobs for specific plugins using map files.
+ReaKontrol will load these maps from `reaKontrol/fxMaps/plugin name.rkfm` inside the REAPER resource folder.
+Slash, backslash and colon are removed from the plugin name.
+For example, on Windows, you might have `%appdata%\REAPER\reaKontrol\fxMaps\VST ReaComp (Cockos).rkfm`.
+The file format is as follows:
+
+```
+# This is a comment.
+ReaComp: # This is optional and overrides the FX name reported to users.
+0 # Parameter 0 will be mapped to the first knob on the first page.
+2 # Parameter 2 will be mapped to the second knob.
+4 Pre comp # Overrides the name reported to the user for this third knob.
+--- # Page break. The remaining knobs on this page will be unassigned.
+[mix] # This is a section name for the following knobs.
+6 # Parameter 6 will be mapped to the first knob on the second page.
+```
+
+ReaKontrol can help you create these maps.
+First, select the FX you want to work with using your Kontrol keyboard.
+Note that the first FX (if any) will be automatically selected when you navigate to a track.
+Then, run the "ReaKontrol: Generate map file for selected FX" action and it will generate the appropriate map file with all the parameter numbers and their names as comments.
+
 ## Reconnecting
 ReaKontrol will connect to a Kontrol keyboard when REAPER starts.
 If the keyboard isn't turned on or connected when REAPER starts, ReaKontrol is not currently able to detect when the keyboard is connected.

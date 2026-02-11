@@ -7,6 +7,9 @@
  */
 
 #pragma once
+#define LOGGING
+
+#include <string>
 
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
@@ -62,19 +65,22 @@
 #define REAPERAPI_WANT_projectconfig_var_getoffs
 #define REAPERAPI_WANT_projectconfig_var_addr
 #define REAPERAPI_WANT_plugin_getapi
+#define REAPERAPI_WANT_GetResourcePath
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
 #ifdef LOGGING
 # include <sstream>
 # define log(msg) { \
-	ostringstream s; \
-	s << "reaKontrol " << msg << endl; \
+	std::ostringstream s; \
+	s << "reaKontrol " << msg << std::endl; \
 	ShowConsoleMsg(s.str().c_str()); \
 }
 #else
 # define log(msg)
 #endif
+
+constexpr int BANK_NUM_SLOTS = 8;
 
 const std::string getKkInstanceName(MediaTrack* track, bool stripPrefix=false);
 

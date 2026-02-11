@@ -8,6 +8,7 @@ Import("env")
 env.Append(CPPPATH=("#include", "#include/WDL"))
 
 sources = [
+	"fxMap.cpp",
 	"main.cpp",
 	"niMidi.cpp",
 	"mcu.cpp",
@@ -21,7 +22,8 @@ if env["PLATFORM"] == "win32":
 		"/clang:-std=c++20",
 		"/EHsc",
 	])
-	libs = ["winmm", "SetupAPI"]
+	sources.append(env.Object("win32_utf8.obj", "#include/WDL/WDL/win32_utf8.c"))
+	libs = ["winmm", "SetupAPI", "user32", "shell32", "Advapi32", "Comdlg32"]
 
 	# We always want debug symbols.
 	env.Append(PDB="${TARGET}.pdb")
@@ -34,7 +36,7 @@ else: # Mac
 	sources.append(swellDir.File("swell-modstub.mm"))
 	libs = []
 	env["CXX"] = "clang++"
-	coreFlags = ("-mmacosx-version-min=10.7 -stdlib=libc++ "
+	coreFlags = ("-mmacosx-version-min=10.15 -stdlib=libc++ "
 		"-arch x86_64 -arch arm64")
 	cxxFlags = coreFlags + " -std=c++20"
 	env.Append(CXXFLAGS=cxxFlags)
