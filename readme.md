@@ -68,7 +68,7 @@ The file format is as follows:
 
 ```
 # This is a comment.
-ReaComp: # This is the FX name that will be reported to users.
+ReaComp: # This is optional and overrides the FX name reported to users.
 0 # Parameter 0 will be mapped to the first knob on the first page.
 2 # Parameter 2 will be mapped to the second knob.
 4 Pre comp # Overrides the name reported to the user for this third knob.
