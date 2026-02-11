@@ -7,7 +7,6 @@
  */
 
 #pragma once
-#define LOGGING
 
 #include <string>
 

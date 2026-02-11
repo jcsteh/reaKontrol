@@ -14,6 +14,7 @@
 #include <fstream>
 #include <regex>
 #include <string>
+#include <sstream>
 #include "fxMap.h"
 #include "reaKontrol.h"
 
