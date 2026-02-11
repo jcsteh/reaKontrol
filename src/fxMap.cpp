@@ -7,9 +7,7 @@
  */
 
 #ifdef _WIN32
-// Must be defined before any C++ STL header is included.
-#define _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
-#include <codecvt>
+#include <WDL/win32_utf8.h>
 #endif
 
 #include <filesystem>
@@ -43,63 +41,40 @@ static const std::regex RE_LINE(
 static MediaTrack* lastTrack = nullptr;
 static int lastFx = -1;
 
-static std::string getFxMapDir() {
-	std::string path(GetResourcePath());
-	path += "/reaKontrol/fxMaps";
+static std::filesystem::path getFxMapDir() {
+	std::filesystem::path path(std::u8string_view((char8_t*)GetResourcePath()));
+	path /= "reaKontrol";
+	path /= "fxMaps";
 	return path;
 }
 
-static std::string getFxMapFileName(MediaTrack* track, int fx) {
+static std::filesystem::path getFxMapFileName(MediaTrack* track, int fx) {
 	char name[100] = "";
 	TrackFX_GetFXName(track, fx, name, sizeof(name));
 	if (!name[0]) {
 		// This will happen when there are no FX on this track.
 		return "";
 	}
-	std::string path = getFxMapDir();
-	path += "/";
+	std::filesystem::path path = getFxMapDir();
+	path /= "";
 	for (char* c = name; *c; ++c) {
 		if (*c == '/' || *c == '\\' || *c == ':') {
 			continue;
 		}
-		path += *c;
+		path += (char8_t)*c;
 	}
 	path += ".rkfm";
 	return path;
 }
 
-#ifdef _WIN32
-static std::wstring getPathForStd(const std::string& fileName) {
-	// REAPER provides UTF-8 strings. However, on Windows, C++ std will
-	// interpret a narrow (8 bit) string as an ANSI string. The easiest way to
-	// deal with this is to convert the string to UTF-16, which Windows will
-	// interpret correctly.
-	static std::wstring_convert<std::codecvt_utf8_utf16<WCHAR>, WCHAR> utf8Utf16;
-	try {
-		return utf8Utf16.from_bytes(fileName);
-	} catch (std::range_error) {
-		// Invalid UTF-8. This really shouldn't happen, but just in case, this hack
-		// just widens the string without any encoding conversion. This may result in
-		// strange characters, but it's better than a crash.
-		std::wostringstream s;
-		s << fileName.c_str();
-		return s.str();
-	}
-}
-#else
-static std::string getPathForStd(const std::string& fileName) {
-	return fileName;
-}
-#endif
-
 FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 	lastTrack = track;
 	lastFx = fx;
-	const std::string path = getFxMapFileName(track, fx);
+	const std::filesystem::path path = getFxMapFileName(track, fx);
 	if (path.empty()) {
 		return;
 	}
-	std::ifstream input(getPathForStd(path));
+	std::ifstream input(path);
 	if (!input) {
 		log("no FX map " << path);
 		return;
@@ -227,11 +202,11 @@ std::string FxMap::getMapNameFor(MediaTrack* track, int fx) {
 		TrackFX_GetFXName(track, fx, name, sizeof(name));
 		return name;
 	};
-	const std::string path = getFxMapFileName(track, fx);
+	const std::filesystem::path path = getFxMapFileName(track, fx);
 	if (path.empty()) {
 		return getOrigName();
 	}
-	std::ifstream input(getPathForStd(path));
+	std::ifstream input(path);
 	if (!input) {
 		return getOrigName();
 	}
@@ -255,14 +230,14 @@ std::string FxMap::getMapNameFor(MediaTrack* track, int fx) {
 }
 
 void FxMap::generateMapFileForSelectedFx() {
-	const std::string fn = getFxMapFileName(lastTrack, lastFx);
+	const std::filesystem::path fn = getFxMapFileName(lastTrack, lastFx);
 	if (fn.empty()) {
 		// No selected FX.
 		return;
 	}
-	const std::string dir = getFxMapDir();
-	std::filesystem::create_directories(getPathForStd(dir));
-	std::ofstream output(getPathForStd(fn));
+	const std::filesystem::path dir = getFxMapDir();
+	std::filesystem::create_directories(dir);
+	std::ofstream output(fn);
 	if (!output) {
 		return;
 	}
@@ -272,4 +247,10 @@ void FxMap::generateMapFileForSelectedFx() {
 		TrackFX_GetParamName(lastTrack, lastFx, p, name, sizeof(name));
 		output << p << " # " << name << std::endl;
 	}
+	output.close();
+	// Locate the file in Explorer, Finder, etc.
+	std::basic_ostringstream<char8_t> params;
+	params << "/select," << fn.u8string();
+	ShellExecute(nullptr, "open", "explorer.exe", (char*)params.str().c_str(),
+		nullptr, SW_SHOW);
 }
