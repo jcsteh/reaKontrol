@@ -581,6 +581,7 @@ class NiMidiSurface: public BaseSurface {
 	FxMap _fxMap;
 	int _suppressFxParam = -1;
 	DWORD _suppressFxParamStartTime = 0;
+	string _lastFxParamValueOsara;
 
 	void _onTrackBankChange() {
 		if (this->_isUsingMixerForFx()) {
@@ -905,6 +906,11 @@ class NiMidiSurface: public BaseSurface {
 			this->_selectedFx, param, value, valText, sizeof(valText));
 		command = isMixer ? CMD_TRACK_VOLUME_TEXT : CMD_PARAM_VALUE_TEXT;
 		this->_sendSysex(command, 0, numInBank, valText);
+		if (osara_outputMessage && isMixer && param == this->_lastChangedFxParam &&
+				this->_lastFxParamValueOsara != valText) {
+			osara_outputMessage(valText);
+			this->_lastFxParamValueOsara = valText;
+		}
 	}
 
 	void _navigateFxBanks(bool next) {
