@@ -51,7 +51,9 @@ However, ReaKontrol provides support for this.
 To access them, press the Mixer button on S MK2, or Track button on A/M series keyboards, then press the 4-d encoder.
 You then use the knobs to adjust parameters.
 If you're using a screen reader, you will need to enable OSARA's "Report changes made via control surfaces" setting to have parameter changes reported.
-Note also that touching the knobs will not provide any feedback and you will instead need to turn the knob slightly to have the parameter and value reported.
+Note also that touching a knob will not provide any feedback.
+Instead, you can quickly turn a knob first to report its parameter and value.
+Subsequent turns will adjust the value.
 On S MK2, you can use the page buttons to move through banks of parameters.
 On A and M series keyboards, pulling the 4-d encoder right and left moves through banks instead.
 Use 4-d encoder down and up to switch plugins.

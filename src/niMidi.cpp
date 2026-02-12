@@ -579,6 +579,8 @@ class NiMidiSurface: public BaseSurface {
 	int _lastChangedFxParam = -1;
 	double _lastChangedFxParamValue = 0;
 	FxMap _fxMap;
+	int _suppressFxParam = -1;
+	DWORD _suppressFxParamStartTime = 0;
 
 	void _onTrackBankChange() {
 		if (this->_isUsingMixerForFx()) {
@@ -925,6 +927,38 @@ class NiMidiSurface: public BaseSurface {
 		const int param = this->_fxMap.getReaperParam(mp);
 		if (param == -1) {
 			return;
+		}
+		if (osara_outputMessage) {
+			DWORD now = GetTickCount();
+			if (param == this->_suppressFxParam) {
+				constexpr DWORD SUPPRESS_DELAY = 200;
+				if (now - this->_suppressFxParamStartTime < SUPPRESS_DELAY) {
+					// We avoid changing the parameter for a short period so that an OSARA user
+					// can use a quick twist of the knob to report the parameter without
+					// changing it.
+					return;
+				}
+				// Allow the value to be changed now.
+			} else {
+				this->_suppressFxParam = param;
+				this->_suppressFxParamStartTime = now;
+				// When an OSARA user first turns the knob, report the parameter without
+				// changing it.
+				ostringstream s;
+				s << this->_fxMap.getParamName(mp) << " ";
+				double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
+					this->_selectedFx, param);
+				char valText[100] = "";
+				TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
+					this->_selectedFx, param, val, valText, sizeof(valText));
+				if (valText[0]) {
+					s << valText;
+				} else {
+					s << val;
+				}
+				osara_outputMessage(s.str().c_str());
+				return;
+			}
 		}
 		double val ;
 		if (param == this->_lastChangedFxParam) {
