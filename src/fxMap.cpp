@@ -18,24 +18,14 @@
 #include "fxMap.h"
 #include "reaKontrol.h"
 
-static const std::regex RE_LINE(
-	// Ignore any space at the start of a line.
-	"^\\s*"
-	"(?:"
-	// Group 1: the line may be the map name, ending with a colon.
-	"([^#]+):"
-	// Groups 2 and 3: or a parameter number, optionally followed by space and
-	// a name.
-	"|(\\d+)(?:\\s+([^#]+))?"
-	// Group 4: or a page break indicator.
-	"|(---)"
-	// Group 5: or a section name in square brackets.
-	"|\\[([^#]+)\\]"
-	")?"
-	// This may be followed by optional space and an optional comment starting
-	// with "#".
-	"\\s*(?:#.*)?$"
-);
+// Strip leading and trailing space, as well as comments.
+static const std::regex RE_STRIP(R"(^\s+|\s*#.*$|\s+$)");
+// The map name, ending with a colon.
+static const std::regex RE_MAP_NAME("(.*):");
+// A parameter number, optionally followed by space and a name.
+static const std::regex RE_PARAM(R"((\d+)(?:\s+(.+))?)");
+// A section name in square brackets.
+static const std::regex RE_SECTION(R"(\[(.+)\])");
 
 // The generateMapFileForSelectedFx action can't access the FxMap instance,
 // so we cache the last selected FX here.
@@ -68,6 +58,18 @@ static std::filesystem::path getFxMapFileName(MediaTrack* track, int fx) {
 	return path;
 }
 
+static std::string getLine(std::ifstream& input) {
+	std::string line;
+	while (std::getline(input, line)) {
+		line = std::regex_replace(line, RE_STRIP, "");
+		if (!line.empty()) {
+			// Not a blank line, only space or a comment.
+			return line;
+		}
+	}
+	return "";
+}
+
 FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 	lastTrack = track;
 	lastFx = fx;
@@ -81,15 +83,10 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 		return;
 	}
 	log("loading FX map " << path);
-	std::string line;
-	while (std::getline(input, line)) {
+	for (std::string line = getLine(input); !line.empty(); line = getLine(input)) {
 		std::smatch m;
-		std::regex_search(line, m, RE_LINE);
-		if (m.empty()) {
-			log("invalid FX map line: " << line);
-			continue;
-		}
-		if (!m.str(1).empty()) {
+		std::regex_search(line, m, RE_MAP_NAME);
+		if (!m.empty()) {
 			if (!this->_mapName.empty()) {
 				log("map name specified more than once, ignoring: " << line);
 				continue;
@@ -98,19 +95,19 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			log("map name: " << this->_mapName);
 			continue;
 		}
-		const std::string numStr = m.str(2);
-		if (!numStr.empty()) {
-			const int rp = std::atoi(numStr.c_str());
+		std::regex_search(line, m, RE_PARAM);
+		if (!m.empty()) {
+			const int rp = std::atoi(m.str(1).c_str());
 			const int mp = this->_reaperParams.size();
 			this->_reaperParams.push_back(rp);
 			this->_mapParams.insert({rp, mp});
-			const std::string paramName = m.str(3);
+			const std::string paramName = m.str(2);
 			if (!paramName.empty()) {
 				this->_paramNames.insert({mp, paramName});
 			}
 			continue;
 		}
-		if (!m.str(4).empty()) {
+		if (line == "---") {
 			// A page break has been requested. Any remaining slots on this page
 			// should be empty.
 			while (this->_reaperParams.size() % BANK_NUM_SLOTS != 0) {
@@ -118,10 +115,12 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			}
 			continue;
 		}
-		const std::string section = m.str(5);
-		if (!section.empty()) {
-			this->_sections.insert({this->_reaperParams.size(), section});
+		std::regex_search(line, m, RE_SECTION);
+		if (!m.empty()) {
+			this->_sections.insert({this->_reaperParams.size(), m.str(1)});
+			continue;
 		}
+		log("invalid FX map line: " << line);
 	}
 	log("loaded " << this->_mapParams.size() << " params from FX map");
 }
@@ -211,21 +210,15 @@ std::string FxMap::getMapNameFor(MediaTrack* track, int fx) {
 	if (!input) {
 		return getOrigName();
 	}
-	std::string line;
-	while (std::getline(input, line)) {
+	for (std::string line = getLine(input); !line.empty(); line = getLine(input)) {
 		std::smatch m;
-		std::regex_search(line, m, RE_LINE);
+		std::regex_search(line, m, RE_MAP_NAME);
 		if (m.empty()) {
-			continue;
-		}
-		if (!m.str(1).empty()) {
-			return m.str(1);
-		}
-		if (!m.str(2).empty() || !m.str(4).empty() || !m.str(5).empty()) {
 			// The map name must be the first non-comment, non-blank line. If we hit
 			// anything else, there's no map name, so don't process any further.
 			break;
 		}
+		return m.str(1);
 	}
 	return getOrigName();
 }
