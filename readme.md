@@ -77,6 +77,8 @@ ReaComp: # This is optional and overrides the FX name reported to users.
 --- # Page break. The remaining knobs on this page will be unassigned.
 [mix] # This is a section name for the following knobs.
 6 # Parameter 6 will be mapped to the first knob on the second page.
+10 /8 dry dB # Adjustments will be 8 times smaller than usual for this parameter.
+11 *8 # Adjustments will be 8 times larger than usual for this parameter.
 ```
 
 ReaKontrol can help you create these maps.
