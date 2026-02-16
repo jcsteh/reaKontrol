@@ -978,7 +978,7 @@ class NiMidiSurface: public BaseSurface {
 			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
 				this->_selectedFx, param);
 		}
-		val += change;
+		val += change * this->_fxMap.getParamMultiplier(mp);
 		val = clamp(val, 0.0, 1.0);
 		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
 			val);

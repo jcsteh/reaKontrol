@@ -22,8 +22,9 @@
 static const std::regex RE_STRIP(R"(^\s+|\s*#.*$|\s+$)");
 // The map name, ending with a colon.
 static const std::regex RE_MAP_NAME("(.*):");
-// A parameter number, optionally followed by space and a name.
-static const std::regex RE_PARAM(R"((\d+)(?:\s+(.+))?)");
+// A parameter number, optionally followed by space and a scaling factor (/n or
+// *n), optionally followed by space and a name.
+static const std::regex RE_PARAM(R"((\d+)(?:\s+([/*])(\d+))?(?:\s+(.+))?)");
 // A section name in square brackets.
 static const std::regex RE_SECTION(R"(\[(.+)\])");
 
@@ -101,7 +102,13 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 			const int mp = this->_reaperParams.size();
 			this->_reaperParams.push_back(rp);
 			this->_mapParams.insert({rp, mp});
-			const std::string paramName = m.str(2);
+			const std::string scaleType = m.str(2);
+			if (!scaleType.empty()) {
+				const int factor = std::atoi(m.str(3).c_str());
+				this->_paramMultipliers.insert({mp,
+					scaleType == "/" ? (1.0 / factor) : factor});
+			}
+			const std::string paramName = m.str(4);
 			if (!paramName.empty()) {
 				this->_paramNames.insert({mp, paramName});
 			}
@@ -166,6 +173,14 @@ std::string FxMap::getParamName(int mapParam) const {
 		const int rp = this->getReaperParam(mapParam);
 		TrackFX_GetParamName(this->_track, this->_fx, rp, name, sizeof(name));
 		return name;
+	}
+	return it->second;
+}
+
+double FxMap::getParamMultiplier(int mapParam) const {
+	auto it = this->_paramMultipliers.find(mapParam);
+	if (it == this->_paramMultipliers.end()) {
+		return 1.0;
 	}
 	return it->second;
 }
