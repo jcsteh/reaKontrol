@@ -934,7 +934,7 @@ class NiMidiSurface: public BaseSurface {
 		if (param == -1) {
 			return;
 		}
-		if (osara_outputMessage) {
+		if (osara_outputMessage && this->_isUsingMixerForFx()) {
 			DWORD now = GetTickCount();
 			if (param == this->_suppressFxParam) {
 				constexpr DWORD SUPPRESS_DELAY = 200;
