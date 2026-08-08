@@ -116,7 +116,7 @@ const string getKkInstanceName(MediaTrack* track, bool stripPrefix) {
 		for (int param : {0, 128, 2048, 4096}) {
 			// The focus follow ID always begins with the prefix NIXX (where XX are any
 			// alphabetical letters), and follows with a multiple digit instance number.
-			char paramName[15];
+			char paramName[15] = "";
 			TrackFX_GetParamName(track, fx, param, paramName, sizeof(paramName));
 			static const regex RE_NAME("NI[a-zA-Z]{2,}(\\d{2,})");
 			cmatch m;

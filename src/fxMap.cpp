@@ -169,7 +169,7 @@ int FxMap::getMapParam(int reaperParam) const {
 std::string FxMap::getParamName(int mapParam) const {
 	auto it = this->_paramNames.find(mapParam);
 	if (it == this->_paramNames.end()) {
-		char name[100];
+		char name[100] = "";
 		const int rp = this->getReaperParam(mapParam);
 		TrackFX_GetParamName(this->_track, this->_fx, rp, name, sizeof(name));
 		return name;
@@ -252,7 +252,7 @@ void FxMap::generateMapFileForSelectedFx() {
 	}
 	const int count = TrackFX_GetNumParams(lastTrack, lastFx);
 	for (int p = 0; p < count; ++p) {
-		char name[100];
+		char name[100] = "";
 		TrackFX_GetParamName(lastTrack, lastFx, p, name, sizeof(name));
 		output << p << " # " << name << std::endl;
 	}
