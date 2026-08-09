@@ -49,12 +49,17 @@ static std::filesystem::path getFxMapFileName(MediaTrack* track, int fx) {
 	}
 	std::filesystem::path path = getFxMapDir();
 	path /= "";
+	// std::filesystem::path treats appended characters as complete Unicode code
+	// points, even if they're char8_t. This breaks multi-byte UTF-8 characters.
+	// Thus, we need to filter the string first and then append it to the path.
+	std::u8string fileName;
 	for (char* c = name; *c; ++c) {
 		if (*c == '/' || *c == '\\' || *c == ':') {
 			continue;
 		}
-		path += (char8_t)*c;
+		fileName += (char8_t)*c;
 	}
+	path += fileName;
 	path += ".rkfm";
 	return path;
 }
