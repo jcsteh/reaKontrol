@@ -847,7 +847,7 @@ class NiMidiSurface: public BaseSurface {
 				s << "page " << page + 1;
 				string sections = this->_fxMap.getSectionsForPage(this->_fxBankStart);
 				if (!sections.empty()) {
-					s << sections;
+					s << " " << sections;
 				}
 				osara_outputMessage(s.str().c_str());
 			}
