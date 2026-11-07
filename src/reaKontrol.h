@@ -59,6 +59,7 @@
 #define REAPERAPI_WANT_TrackFX_GetPreset
 #define REAPERAPI_WANT_TrackFX_NavigatePresets
 #define REAPERAPI_WANT_TrackFX_GetNamedConfigParm
+#define REAPERAPI_WANT_TrackFX_SetNamedConfigParm
 #define REAPERAPI_WANT_TrackFX_GetParamFromIdent
 #define REAPERAPI_WANT_CSurf_OnTempoChange
 #define REAPERAPI_WANT_projectconfig_var_getoffs

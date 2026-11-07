@@ -808,7 +808,11 @@ class NiMidiSurface: public BaseSurface {
 			string(subIndexes.rbegin(), subIndexes.rend()));
 	}
 
-	bool _isFxParamToggle(int param) {
+	unsigned char _getFxParamVisType(int param) {
+		if (FxMap::isNamedConfigParam(param)) {
+			return this->_fxMap.isNamedConfigParamToggle(param) ?
+				PARAM_VIS_SWITCH : PARAM_VIS_DISCRETE;
+		}
 		bool isToggle = false;
 		TrackFX_GetParameterStepSizes(this->_lastSelectedTrack, this->_selectedFx,
 			param, nullptr, nullptr, nullptr, &isToggle);
@@ -819,7 +823,25 @@ class NiMidiSurface: public BaseSurface {
 				param == TrackFX_GetParamFromIdent(this->_lastSelectedTrack,
 					this->_selectedFx, ":delta");
 		}
-		return isToggle;
+		return isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR;
+	}
+
+	double _getFxParamNormalized(int param) {
+		if (FxMap::isNamedConfigParam(param)) {
+			return this->_fxMap.getNamedConfigParamNormalized(param);
+		}
+		return TrackFX_GetParamNormalized(this->_lastSelectedTrack,
+			this->_selectedFx, param);
+	}
+
+	string _formatFxParamValueNormalized(int param, double value) {
+		if (FxMap::isNamedConfigParam(param)) {
+			return this->_fxMap.getNamedConfigParamValueText(param, value);
+		}
+		char valText[100] = "";
+		TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
+			this->_selectedFx, param, value, valText, sizeof(valText));
+		return valText;
 	}
 
 	void _fxBankChanged(bool shouldOutputOsaraMessage = true) {
@@ -876,14 +898,12 @@ class NiMidiSurface: public BaseSurface {
 				this->_sendSysex(CMD_TRACK_MUTED, 0, numInBank);
 				this->_sendSysex(CMD_TRACK_ARMED, 0, numInBank);
 			} else {
-				const bool isToggle = this->_isFxParamToggle(rp);
-				this->_sendSysex(CMD_PARAM_NAME,
-					isToggle ? PARAM_VIS_SWITCH : PARAM_VIS_UNIPOLAR, numInBank, name);
+				this->_sendSysex(CMD_PARAM_NAME, this->_getFxParamVisType(rp),
+					numInBank, name);
 				string section = this->_fxMap.getSection(mp);
 				this->_sendSysex(CMD_PARAM_SECTION, 0, numInBank, section);
 			}
-			double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
-				this->_selectedFx, rp);
+			double val = this->_getFxParamNormalized(rp);
 			this->_fxParamValueChanged(rp, numInBank, val);
 		}
 		// If there aren't sufficient parameters to fill the bank, clear the
@@ -900,15 +920,13 @@ class NiMidiSurface: public BaseSurface {
 	void _fxParamValueChanged(int param, int numInBank, double value) {
 		const bool isMixer = this->_isUsingMixerForFx();
 		unsigned char command = isMixer ? CMD_KNOB_VOLUME0 : CMD_KNOB_PARAM0;
-		this->_sendCc(command + numInBank,127 * value); 
-		char valText[100] = "";
-		TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
-			this->_selectedFx, param, value, valText, sizeof(valText));
+		this->_sendCc(command + numInBank, 127 * value);
+		const string valText = this->_formatFxParamValueNormalized(param, value);
 		command = isMixer ? CMD_TRACK_VOLUME_TEXT : CMD_PARAM_VALUE_TEXT;
 		this->_sendSysex(command, 0, numInBank, valText);
 		if (osara_outputMessage && isMixer && param == this->_lastChangedFxParam &&
 				this->_lastFxParamValueOsara != valText) {
-			osara_outputMessage(valText);
+			osara_outputMessage(valText.c_str());
 			this->_lastFxParamValueOsara = valText;
 		}
 	}
@@ -952,12 +970,9 @@ class NiMidiSurface: public BaseSurface {
 				// changing it.
 				ostringstream s;
 				s << this->_fxMap.getParamName(mp) << " ";
-				double val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
-					this->_selectedFx, param);
-				char valText[100] = "";
-				TrackFX_FormatParamValueNormalized(this->_lastSelectedTrack,
-					this->_selectedFx, param, val, valText, sizeof(valText));
-				if (valText[0]) {
+				const double val = this->_getFxParamNormalized(param);
+				const string valText = this->_formatFxParamValueNormalized(param, val);
+				if (!valText.empty()) {
 					s << valText;
 				} else {
 					s << val;
@@ -966,7 +981,7 @@ class NiMidiSurface: public BaseSurface {
 				return;
 			}
 		}
-		double val ;
+		double val;
 		if (param == this->_lastChangedFxParam) {
 			// Some parameters snap to defined values when you set them. This means that
 			// the next time we retrieve the value, it might be the same, in which case
@@ -975,15 +990,21 @@ class NiMidiSurface: public BaseSurface {
 			// relative to that cached value.
 			val = this->_lastChangedFxParamValue;
 		} else {
-			val = TrackFX_GetParamNormalized(this->_lastSelectedTrack,
-				this->_selectedFx, param);
+			val = this->_getFxParamNormalized(param);
 		}
 		val += change * this->_fxMap.getParamMultiplier(mp);
 		val = clamp(val, 0.0, 1.0);
-		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
-			val);
 		this->_lastChangedFxParam = param;
 		this->_lastChangedFxParamValue = val;
+		if (FxMap::isNamedConfigParam(param)) {
+			double snappedVal = 0.0;
+			if (this->_fxMap.setNamedConfigParamNormalized(param, val, &snappedVal)) {
+				this->_fxParamValueChanged(param, numInBank, snappedVal);
+			}
+			return;
+		}
+		TrackFX_SetParamNormalized(this->_lastSelectedTrack, this->_selectedFx, param,
+			val);
 	}
 
 	void _fxPresetChanged() {
