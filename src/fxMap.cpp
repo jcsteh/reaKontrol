@@ -10,6 +10,10 @@
 #include <WDL/win32_utf8.h>
 #endif
 
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <regex>
@@ -22,9 +26,10 @@
 static const std::regex RE_STRIP(R"(^\s+|\s*#.*$|\s+$)");
 // The map name, ending with a colon.
 static const std::regex RE_MAP_NAME("(.*):");
-// A parameter number, optionally followed by space and a scaling factor (/n or
-// *n), optionally followed by space and a name.
-static const std::regex RE_PARAM(R"((\d+)(?:\s+([/*])(\d+))?(?:\s+(.+))?)");
+// A parameter number or named config parameter identifier, optionally followed
+// by space and a scaling factor (/n or *n), optionally followed by space and a
+// name.
+static const std::regex RE_PARAM(R"((\d+|[A-Za-z_]\w*)(?:\s+([/*])(\d+))?(?:\s+(.+))?)");
 // A section name in square brackets.
 static const std::regex RE_SECTION(R"(\[(.+)\])");
 
@@ -76,7 +81,8 @@ static std::string getLine(std::ifstream& input) {
 	return "";
 }
 
-FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
+FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx),
+		_namedConfigParams(_getNamedConfigParamsFor(track, fx)) {
 	lastTrack = track;
 	lastFx = fx;
 	const std::filesystem::path path = getFxMapFileName(track, fx);
@@ -103,7 +109,17 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 		}
 		std::regex_search(line, m, RE_PARAM);
 		if (!m.empty()) {
-			const int rp = std::atoi(m.str(1).c_str());
+			const std::string paramId = m.str(1);
+			int rp = -1;
+			if (std::isdigit((unsigned char)paramId[0])) {
+				rp = std::atoi(paramId.c_str());
+			} else {
+				rp = this->_getNamedConfigReaperParam(paramId);
+				if (rp == -1) {
+					log("invalid FX map line: " << line);
+					continue;
+				}
+			}
 			const int mp = this->_reaperParams.size();
 			this->_reaperParams.push_back(rp);
 			this->_mapParams.insert({rp, mp});
@@ -137,6 +153,65 @@ FxMap::FxMap(MediaTrack* track, int fx) : _track(track), _fx(fx) {
 	log("loaded " << this->_mapParams.size() << " params from FX map");
 }
 
+std::vector<FxMap::NamedConfigParam> FxMap::_getNamedConfigParamsFor(
+	MediaTrack* track, int fx
+) {
+	static const NamedConfigParamValues TOGGLE_VALUES = {
+		{"off", "0"},
+		{"on", "1"},
+	};
+	static const NamedConfigParamValues REAEQ_BAND_TYPE_VALUES = {
+		{"low shelf", "0"},
+		{"high shelf", "1"},
+		{"band", "8"},
+		{"low pass", "3"},
+		{"high pass", "4"},
+		{"all pass", "5"},
+		{"notch", "6"},
+		{"band pass", "7"},
+		{"parallel band pass", "10"},
+		{"band (alt)", "9"},
+		{"band (alt 2)", "2"},
+	};
+
+	std::vector<NamedConfigParam> params;
+	if (!track || fx < 0) {
+		return params;
+	}
+	char fxName[100] = "";
+	TrackFX_GetFXName(track, fx, fxName, sizeof(fxName));
+	if (std::strcmp(fxName, "VST: ReaEQ (Cockos)") == 0) {
+		for (int band = 0; ; ++band) {
+			std::ostringstream name;
+			name << "BANDENABLED" << band;
+			char type[2] = "";
+			if (!TrackFX_GetNamedConfigParm(track, fx, name.str().c_str(),
+					type, sizeof(type))) {
+				// This band doesn't exist.
+				break;
+			}
+			std::ostringstream dispName;
+			dispName << "Band " << (band + 1) << " enable";
+			params.push_back({dispName.str(), name.str(), &TOGGLE_VALUES});
+			name.str("");
+			name << "BANDTYPE" << band;
+			dispName.str("");
+			dispName << "Band " << (band + 1) << " type";
+			params.push_back({dispName.str(), name.str(), &REAEQ_BAND_TYPE_VALUES});
+		}
+	}
+	return params;
+}
+
+int FxMap::_getNamedConfigReaperParam(const std::string& configName) const {
+	for (size_t i = 0; i < this->_namedConfigParams.size(); ++i) {
+		if (this->_namedConfigParams[i].configName == configName) {
+			return -2 - (int)i;
+		}
+	}
+	return -1;
+}
+
 std::string FxMap::getMapName() const {
 	if (this->_mapName.empty()) {
 		char name[100];
@@ -148,21 +223,29 @@ std::string FxMap::getMapName() const {
 
 int FxMap::getParamCount() const {
 	if (this->_reaperParams.empty()) {
-		return TrackFX_GetNumParams(this->_track, this->_fx);
+		return (int)this->_namedConfigParams.size() +
+			TrackFX_GetNumParams(this->_track, this->_fx);
 	}
 	return this->_reaperParams.size();
 }
 
 int FxMap::getReaperParam(int mapParam) const {
 	if (this->_reaperParams.empty()) {
-		return mapParam;
+		const int namedCount = (int)this->_namedConfigParams.size();
+		if (mapParam < namedCount) {
+			return -2 - mapParam;
+		}
+		return mapParam - namedCount;
 	}
 	return this->_reaperParams[mapParam];
 }
 
 int FxMap::getMapParam(int reaperParam) const {
 	if (this->_reaperParams.empty()) {
-		return reaperParam;
+		if (isNamedConfigParam(reaperParam)) {
+			return -2 - reaperParam;
+		}
+		return (int)this->_namedConfigParams.size() + reaperParam;
 	}
 	auto it = this->_mapParams.find(reaperParam);
 	if (it == this->_mapParams.end()) {
@@ -174,12 +257,87 @@ int FxMap::getMapParam(int reaperParam) const {
 std::string FxMap::getParamName(int mapParam) const {
 	auto it = this->_paramNames.find(mapParam);
 	if (it == this->_paramNames.end()) {
-		char name[100] = "";
 		const int rp = this->getReaperParam(mapParam);
+		if (const auto* spec = this->_getNamedConfigParam(rp)) {
+			return spec->displayName;
+		}
+		char name[100] = "";
 		TrackFX_GetParamName(this->_track, this->_fx, rp, name, sizeof(name));
 		return name;
 	}
 	return it->second;
+}
+
+const FxMap::NamedConfigParam* FxMap::_getNamedConfigParam(int reaperParam) const {
+	if (!isNamedConfigParam(reaperParam)) {
+		return nullptr;
+	}
+	const int index = -2 - reaperParam;
+	if (index < 0 || index >= (int)this->_namedConfigParams.size()) {
+		return nullptr;
+	}
+	return &this->_namedConfigParams[index];
+}
+
+bool FxMap::isNamedConfigParamToggle(int reaperParam) const {
+	const auto* spec = this->_getNamedConfigParam(reaperParam);
+	return spec && spec->values && spec->values->size() == 2;
+}
+
+double FxMap::getNamedConfigParamNormalized(int reaperParam) const {
+	const auto* spec = this->_getNamedConfigParam(reaperParam);
+	if (!spec || !spec->values || spec->values->size() < 2) {
+		return 0.0;
+	}
+	char valueStr[50] = "";
+	if (!TrackFX_GetNamedConfigParm(this->_track, this->_fx,
+			spec->configName.c_str(), valueStr, sizeof(valueStr)) || !valueStr[0]) {
+		return 0.0;
+	}
+	for (size_t v = 0; v < spec->values->size(); ++v) {
+		if (std::strcmp(valueStr, (*spec->values)[v].second) == 0) {
+			return (double)v / (double)(spec->values->size() - 1);
+		}
+	}
+	return 0.0;
+}
+
+std::string FxMap::getNamedConfigParamValueText(int reaperParam, double normValue) const {
+	const auto* spec = this->_getNamedConfigParam(reaperParam);
+	if (!spec || !spec->values || spec->values->empty()) {
+		return "";
+	}
+	const int maxIndex = (int)spec->values->size() - 1;
+	int index = (int)std::round(normValue * maxIndex);
+	index = std::clamp(index, 0, maxIndex);
+	return (*spec->values)[index].first;
+}
+
+bool FxMap::setNamedConfigParamNormalized(int reaperParam, double normValue,
+	double* outSnappedNorm
+) const {
+	const auto* spec = this->_getNamedConfigParam(reaperParam);
+	if (!spec || !spec->values || spec->values->empty()) {
+		return false;
+	}
+	const int maxIndex = (int)spec->values->size() - 1;
+	int index = (int)std::round(normValue * maxIndex);
+	index = std::clamp(index, 0, maxIndex);
+	if (outSnappedNorm) {
+		*outSnappedNorm = maxIndex > 0 ? ((double)index / (double)maxIndex) : 0.0;
+	}
+	const char* valueStr = (*spec->values)[index].second;
+	char curValueStr[50] = "";
+	if (TrackFX_GetNamedConfigParm(this->_track, this->_fx,
+			spec->configName.c_str(), curValueStr, sizeof(curValueStr)) &&
+			std::strcmp(curValueStr, valueStr) == 0) {
+		return false;
+	}
+	// ReaEQ returns false from TrackFX_SetNamedConfigParm for BANDENABLED and
+	// BANDTYPE even when the change succeeds.
+	TrackFX_SetNamedConfigParm(this->_track, this->_fx,
+		spec->configName.c_str(), valueStr);
+	return true;
 }
 
 double FxMap::getParamMultiplier(int mapParam) const {
@@ -254,6 +412,9 @@ void FxMap::generateMapFileForSelectedFx() {
 	std::ofstream output(fn);
 	if (!output) {
 		return;
+	}
+	for (const auto& spec : _getNamedConfigParamsFor(lastTrack, lastFx)) {
+		output << spec.configName << " # " << spec.displayName << std::endl;
 	}
 	const int count = TrackFX_GetNumParams(lastTrack, lastFx);
 	for (int p = 0; p < count; ++p) {
