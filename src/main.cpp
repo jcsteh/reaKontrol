@@ -7,6 +7,7 @@
  */
 
 #include <cstring>
+#include <fstream>
 #include <regex>
 #include <string>
 #ifdef _WIN32
@@ -40,6 +41,29 @@ const size_t USB_PID_LEN = 4;
 const char* KKMK1_USB_PIDS[] = {"1340", "1350", "1360", "1410"};
 
 void (*osara_outputMessage)(const char* message) = nullptr;
+
+bool isLoggingEnabled() {
+	static const bool enabled = GetExtState("reaKontrol", "logging")[0] == '1';
+	return enabled;
+}
+
+void writeLog(const string& message) {
+	static const string logFilePath = [] {
+		char tempPath[1024] = {};
+#ifdef _WIN32
+		// On Windows, ofstream interprets a narrow path as ANSI.
+		GetTempPathA(sizeof(tempPath), tempPath);
+#else
+		GetTempPath(sizeof(tempPath), tempPath);
+#endif
+		string result(tempPath);
+		if (!result.empty() && result.back() != '/' && result.back() != '\\') {
+			result += '/';
+		}
+		return result + "reaKontrol.log";
+	}();
+	ofstream(logFilePath, ios::app) << message << '\n';
+}
 
 int getKkMidiDevice(auto countFunc, auto getFunc) {
 	int count = countFunc();

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <string>
+#include <sstream>
 
 #define REAPERAPI_MINIMAL
 #define REAPERAPI_WANT_GetNumMIDIInputs
@@ -22,9 +23,7 @@
 #define REAPERAPI_WANT_CSurf_TrackToID
 #define REAPERAPI_WANT_CSurf_TrackFromID
 #define REAPERAPI_WANT_CSurf_OnPlay
-#ifdef LOGGING
-#define REAPERAPI_WANT_ShowConsoleMsg
-#endif
+#define REAPERAPI_WANT_GetExtState
 #define REAPERAPI_WANT_TrackFX_GetCount
 #define REAPERAPI_WANT_TrackFX_GetFXName
 #define REAPERAPI_WANT_TrackFX_GetParamName
@@ -68,16 +67,16 @@
 #include <reaper/reaper_plugin.h>
 #include <reaper/reaper_plugin_functions.h>
 
-#ifdef LOGGING
-# include <sstream>
-# define log(msg) { \
-	std::ostringstream s; \
-	s << "reaKontrol " << msg << std::endl; \
-	ShowConsoleMsg(s.str().c_str()); \
-}
-#else
-# define log(msg)
-#endif
+bool isLoggingEnabled();
+void writeLog(const std::string& message);
+
+#define log(msg) do { \
+	if (isLoggingEnabled()) { \
+		std::ostringstream stream; \
+		stream << msg; \
+		writeLog(stream.str()); \
+	} \
+} while (false)
 
 constexpr int BANK_NUM_SLOTS = 8;
 
