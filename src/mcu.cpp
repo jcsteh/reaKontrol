@@ -109,15 +109,14 @@ class McuSurface: public BaseSurface {
 		event->frame_offset = 0;
 		event->size = message.length();
 		memcpy(event->midi_message, message.c_str(), message.length());
-#ifdef LOGGING
-		ostringstream s;
-		s << "send raw" << hex << showbase;
-		for (int i = 0; i < event->size; ++i) {
-			s << " " << (int)event->midi_message[i];
+		if (isLoggingEnabled()) {
+			ostringstream stream;
+			stream << "send raw" << hex << showbase;
+			for (int i = 0; i < event->size; ++i) {
+				stream << " " << (int)event->midi_message[i];
+			}
+			writeLog(stream.str());
 		}
-		s << endl;
-		ShowConsoleMsg(s.str().c_str());
-#endif
 		this->_midiOut->SendMsg(event, -1);
 		delete event;
 	}
